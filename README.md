@@ -10,7 +10,7 @@ It reads a radio `.rpf`, finds the actual music containers, lets the user link M
 - Lists discovered archives in a station dropdown using familiar station names, such as West Coast Classics and Radio Los Santos, rather than only archive codes.
 - Opens the selected station and detects its stereo music AWC containers.
 - Excludes short station IDs and imaging clips, so the West Coast Classics source archive reports its 29 music slots.
-- Loads MP3/WAV files from one or more music folders.
+- Loads MP3/WAV files from one or more music folders. The native folder picker supports Ctrl/Shift multi-selection, so several artist folders can be added in one action.
 - Assigns a track to any radio slot through drag-and-drop, double-click assignment, or ordered auto-fill.
 - Converts each assignment to two 48 kHz, 16-bit PCM mono channels while retaining the original stereo image.
 - Rebuilds the matching AWC data while preserving the original container metadata and radio events.
@@ -28,7 +28,7 @@ It reads a radio `.rpf`, finds the actual music containers, lets the user link M
 1. Launch `GTARadioEditor.exe`.
 2. Choose the GTA V game or port directory. The app finds `RADIO_*.rpf` files anywhere under it.
 3. Select a friendly station name from the **Radio station** dropdown, then click **Open selected station**. The table lists only real music slots.
-4. Add one or more music folders.
+4. Click **Add folders**, Ctrl/Shift-select one or more music folders, and confirm once.
 5. Drag a music entry from the right-hand list onto a radio slot, or select both and use **Assign selected**. `Auto-fill in order` is available when a deliberate order is not important.
 6. Click **Build output RPF** and select a new folder. Keep the prefilled original RPF file name unchanged; the application will refuse to overwrite the selected source archive or rebuild under a different name.
 7. Put the output in the equivalent path under GTA V's `mods` folder. For example:

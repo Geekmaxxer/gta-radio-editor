@@ -77,7 +77,7 @@ public sealed class MainForm : Form
             RowCount = 4,
             Padding = new Padding(14),
         };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 140));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 190));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 115));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -86,34 +86,69 @@ public sealed class MainForm : Form
         var setup = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            ColumnCount = 3,
-            RowCount = 4
+            ColumnCount = 1,
+            RowCount = 2
         };
-        setup.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        setup.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        setup.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        setup.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        setup.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        setup.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        setup.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        setup.Controls.Add(new Label { Text = "GTA V folder", AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(0, 6, 8, 6) }, 0, 0);
-        setup.Controls.Add(_gtaDirectoryPath, 1, 0);
-        setup.Controls.Add(new Button { Text = "Browse...", AutoSize = true, Tag = "gta-directory" }, 2, 0);
-        setup.Controls.Add(new Label { Text = "Radio station", AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(0, 6, 8, 6) }, 0, 1);
-        setup.Controls.Add(_stationSelector, 1, 1);
-        setup.Controls.Add(new Button { Text = "Rescan", AutoSize = true, Tag = "rescan-stations" }, 2, 1);
-        setup.Controls.Add(new Label { Text = "Music folders", AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(0, 6, 8, 6) }, 0, 2);
-        setup.Controls.Add(_musicPath, 1, 2);
-        setup.Controls.Add(new Button { Text = "Add folders...", AutoSize = true, Tag = "music" }, 2, 2);
-        var actions = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Margin = new Padding(0, 8, 0, 0) };
-        actions.Controls.Add(_scanButton);
-        actions.Controls.Add(_assignButton);
-        actions.Controls.Add(new Button { Text = "Auto-fill in order", AutoSize = true, Tag = "auto" });
-        actions.Controls.Add(new Button { Text = "Clear assignments", AutoSize = true, Tag = "clear" });
-        actions.Controls.Add(new Button { Text = "Clear music folders", AutoSize = true, Tag = "clear-music" });
-        actions.Controls.Add(_buildButton);
-        setup.Controls.Add(actions, 1, 3);
-        setup.SetColumnSpan(actions, 2);
+        setup.RowStyles.Add(new RowStyle(SizeType.Absolute, 95));
+        setup.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+
+        var browseGameButton = new Button { Text = "Browse...", AutoSize = true, Tag = "gta-directory" };
+        var rescanStationsButton = new Button { Text = "Rescan", AutoSize = true, Tag = "rescan-stations" };
+        var gameAndStationStep = new GroupBox { Text = "1. Select the GTA V folder and radio station", Dock = DockStyle.Fill, Margin = new Padding(0, 0, 0, 6) };
+        var gameAndStationLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 2 };
+        gameAndStationLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        gameAndStationLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        gameAndStationLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        gameAndStationLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+        gameAndStationLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+        gameAndStationLayout.Controls.Add(new Label { Text = "GTA V folder", AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(3, 0, 8, 0) }, 0, 0);
+        gameAndStationLayout.Controls.Add(_gtaDirectoryPath, 1, 0);
+        gameAndStationLayout.Controls.Add(browseGameButton, 2, 0);
+        gameAndStationLayout.Controls.Add(new Label { Text = "Radio station", AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(3, 0, 8, 0) }, 0, 1);
+        gameAndStationLayout.Controls.Add(_stationSelector, 1, 1);
+        var stationActions = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = false };
+        stationActions.Controls.Add(_scanButton);
+        stationActions.Controls.Add(rescanStationsButton);
+        gameAndStationLayout.Controls.Add(stationActions, 2, 1);
+        gameAndStationStep.Controls.Add(gameAndStationLayout);
+        setup.Controls.Add(gameAndStationStep, 0, 0);
+
+        var workflowSteps = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1 };
+        workflowSteps.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 48));
+        workflowSteps.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33));
+        workflowSteps.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 19));
+
+        var addMusicButton = new Button { Text = "Add folders...", AutoSize = true, Tag = "music" };
+        var clearMusicButton = new Button { Text = "Clear", AutoSize = true, Tag = "clear-music" };
+        var musicStep = new GroupBox { Text = "2. Add replacement music", Dock = DockStyle.Fill, Margin = new Padding(0, 0, 6, 0) };
+        var musicStepLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1 };
+        musicStepLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        musicStepLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        musicStepLayout.Controls.Add(_musicPath, 0, 0);
+        var musicActions = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = false };
+        musicActions.Controls.Add(addMusicButton);
+        musicActions.Controls.Add(clearMusicButton);
+        musicStepLayout.Controls.Add(musicActions, 1, 0);
+        musicStep.Controls.Add(musicStepLayout);
+        workflowSteps.Controls.Add(musicStep, 0, 0);
+
+        var autoFillButton = new Button { Text = "Auto-fill in order", AutoSize = true, Tag = "auto" };
+        var clearAssignmentsButton = new Button { Text = "Clear assignments", AutoSize = true, Tag = "clear" };
+        var mappingStep = new GroupBox { Text = "3. Map tracks to slots", Dock = DockStyle.Fill, Margin = new Padding(0, 0, 6, 0) };
+        var mappingActions = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = true };
+        mappingActions.Controls.Add(_assignButton);
+        mappingActions.Controls.Add(autoFillButton);
+        mappingActions.Controls.Add(clearAssignmentsButton);
+        mappingStep.Controls.Add(mappingActions);
+        workflowSteps.Controls.Add(mappingStep, 1, 0);
+
+        var buildStep = new GroupBox { Text = "4. Build", Dock = DockStyle.Fill };
+        var buildActions = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = false };
+        buildActions.Controls.Add(_buildButton);
+        buildStep.Controls.Add(buildActions);
+        workflowSteps.Controls.Add(buildStep, 2, 0);
+
+        setup.Controls.Add(workflowSteps, 0, 1);
         _stationSelector.DataSource = _stations;
         root.Controls.Add(setup, 0, 0);
 
@@ -137,7 +172,7 @@ public sealed class MainForm : Form
         musicPanel.Controls.Add(_musicList, 0, 1);
         musicPanel.Controls.Add(new Label
         {
-            Text = "Drag a track onto a radio row, or select both and choose Assign selected.\nThe app converts MP3/WAV to 48 kHz 16-bit PCM while building.",
+            Text = "Use Add folders to Ctrl/Shift-select several artist folders at once. Drag a track onto a radio row, or select both and choose Assign selected.\nThe app converts MP3/WAV to 48 kHz 16-bit PCM while building.",
             AutoSize = true,
             Margin = new Padding(0, 8, 0, 0)
         }, 0, 2);
@@ -151,7 +186,7 @@ public sealed class MainForm : Form
         statusStrip.Items.Add(_status);
         root.Controls.Add(statusStrip, 0, 3);
 
-        foreach (var button in setup.Controls.OfType<Button>().Concat(actions.Controls.OfType<Button>()))
+        foreach (var button in new[] { browseGameButton, rescanStationsButton, addMusicButton, clearMusicButton, autoFillButton, clearAssignmentsButton })
         {
             button.Click += ButtonClick;
         }
@@ -315,33 +350,19 @@ public sealed class MainForm : Form
 
     private async Task AddMusicFoldersAsync()
     {
-        var foldersAdded = 0;
-        while (true)
-        {
-            using var dialog = new FolderBrowserDialog
-            {
-                Description = "Select a music folder containing MP3 or WAV files"
-            };
-            if (dialog.ShowDialog(this) != DialogResult.OK)
-            {
-                break;
-            }
-
-            if (!_musicFolders.Contains(dialog.SelectedPath, StringComparer.OrdinalIgnoreCase))
-            {
-                _musicFolders.Add(dialog.SelectedPath);
-                foldersAdded++;
-            }
-
-            if (MessageBox.Show(this, "Add another music folder?", "Music folders", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
-            {
-                break;
-            }
-        }
-
-        if (foldersAdded == 0)
+        var selectedFolders = MultiFolderPicker.Pick(this, "Select one or more music folders (Ctrl/Shift to select several)");
+        var foldersAdded = selectedFolders
+            .Where(Directory.Exists)
+            .Where(path => !_musicFolders.Contains(path, StringComparer.OrdinalIgnoreCase))
+            .ToList();
+        if (foldersAdded.Count == 0)
         {
             return;
+        }
+
+        foreach (var folder in foldersAdded)
+        {
+            _musicFolders.Add(folder);
         }
 
         UpdateMusicFolderDisplay();
