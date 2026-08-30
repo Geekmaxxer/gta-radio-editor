@@ -1,4 +1,5 @@
 using GTARadioEditor.Models;
+using NAudio.Vorbis;
 using NAudio.Wave;
 using NAudio.Wave.SampleProviders;
 
@@ -7,14 +8,21 @@ namespace GTARadioEditor.Services;
 public static class AudioConversionService
 {
     public const int GtaSampleRate = 48_000;
+    private static readonly HashSet<string> SupportedExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".mp3", ".wav", ".flac", ".aac", ".m4a", ".wma", ".ogg"
+    };
+
+    public static bool IsSupportedFile(string path) =>
+        SupportedExtensions.Contains(Path.GetExtension(path));
 
     public static async Task<AudioTrack> InspectAsync(string filePath, CancellationToken cancellationToken = default)
     {
         return await Task.Run(() =>
         {
             cancellationToken.ThrowIfCancellationRequested();
-            using var reader = new AudioFileReader(filePath);
-            return new AudioTrack(filePath, reader.TotalTime);
+            using var audio = OpenAudio(filePath);
+            return new AudioTrack(filePath, audio.TotalTime);
         }, cancellationToken);
     }
 
@@ -27,12 +35,12 @@ public static class AudioConversionService
 
     private static ConvertedRadioAudio ConvertToGtaStereoPair(string filePath, CancellationToken cancellationToken)
     {
-        using var reader = new AudioFileReader(filePath);
-        ISampleProvider stereoInput = reader.WaveFormat.Channels switch
+        using var audio = OpenAudio(filePath);
+        ISampleProvider stereoInput = audio.WaveFormat.Channels switch
         {
-            1 => new MonoToStereoSampleProvider(reader),
-            2 => reader,
-            _ => throw new NotSupportedException($"{Path.GetFileName(filePath)} has {reader.WaveFormat.Channels} channels. Only mono or stereo sources are supported.")
+            1 => new MonoToStereoSampleProvider(audio.Samples),
+            2 => audio.Samples,
+            _ => throw new NotSupportedException($"{Path.GetFileName(filePath)} has {audio.WaveFormat.Channels} channels. Only mono or stereo sources are supported.")
         };
 
         var resampled = new WdlResamplingSampleProvider(stereoInput, GtaSampleRate);
@@ -70,6 +78,66 @@ public static class AudioConversionService
 
         var duration = TimeSpan.FromSeconds(outputFrames / (double)GtaSampleRate);
         return new ConvertedRadioAudio(BuildMonoPcmWave(leftStream.ToArray()), BuildMonoPcmWave(rightStream.ToArray()), outputFrames, duration);
+    }
+
+    private static DecodedAudio OpenAudio(string filePath)
+    {
+        if (!IsSupportedFile(filePath))
+        {
+            throw new NotSupportedException($"{Path.GetExtension(filePath)} is not a supported audio format.");
+        }
+
+        if (Path.GetExtension(filePath).Equals(".ogg", StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                var reader = new VorbisWaveReader(filePath);
+                return new DecodedAudio(reader, reader.ToSampleProvider(), reader.WaveFormat, reader.TotalTime);
+            }
+            catch (Exception vorbisException)
+            {
+                throw new InvalidDataException(
+                    $"Could not decode {Path.GetFileName(filePath)} as Ogg Vorbis. Only Ogg Vorbis audio is supported for .ogg files.",
+                    vorbisException);
+            }
+        }
+
+        try
+        {
+            var reader = new AudioFileReader(filePath);
+            return new DecodedAudio(reader, reader, reader.WaveFormat, reader.TotalTime);
+        }
+        catch (Exception exception) when (UsesWindowsMediaFoundationCodec(filePath))
+        {
+            throw new InvalidDataException(
+                $"Could not decode {Path.GetFileName(filePath)}. This format uses Windows Media Foundation; install the Windows Media Feature Pack if this Windows installation does not include its media codecs.",
+                exception);
+        }
+    }
+
+    private static bool UsesWindowsMediaFoundationCodec(string filePath) =>
+        Path.GetExtension(filePath).Equals(".flac", StringComparison.OrdinalIgnoreCase) ||
+        Path.GetExtension(filePath).Equals(".aac", StringComparison.OrdinalIgnoreCase) ||
+        Path.GetExtension(filePath).Equals(".m4a", StringComparison.OrdinalIgnoreCase) ||
+        Path.GetExtension(filePath).Equals(".wma", StringComparison.OrdinalIgnoreCase);
+
+    private sealed class DecodedAudio : IDisposable
+    {
+        private readonly IDisposable _reader;
+
+        public DecodedAudio(IDisposable reader, ISampleProvider samples, WaveFormat waveFormat, TimeSpan totalTime)
+        {
+            _reader = reader;
+            Samples = samples;
+            WaveFormat = waveFormat;
+            TotalTime = totalTime;
+        }
+
+        public ISampleProvider Samples { get; }
+        public WaveFormat WaveFormat { get; }
+        public TimeSpan TotalTime { get; }
+
+        public void Dispose() => _reader.Dispose();
     }
 
     private static void WritePcm16(byte[] destination, int offset, float sample)

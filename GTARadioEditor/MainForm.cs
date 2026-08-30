@@ -31,7 +31,7 @@ public sealed class MainForm : Form
     {
         Dock = DockStyle.Fill,
         ReadOnly = true,
-        PlaceholderText = "Add one or more folders containing MP3 or WAV files"
+        PlaceholderText = "Add music folders: MP3, WAV, FLAC, AAC, M4A, WMA, or OGG"
     };
     private readonly DataGridView _slotGrid = new();
     private readonly ListBox _musicList = new()
@@ -172,7 +172,7 @@ public sealed class MainForm : Form
         musicPanel.Controls.Add(_musicList, 0, 1);
         musicPanel.Controls.Add(new Label
         {
-            Text = "Use Add folders to Ctrl/Shift-select several artist folders at once. Drag a track onto a radio row, or select both and choose Assign selected.\nThe app converts MP3/WAV to 48 kHz 16-bit PCM while building.",
+            Text = "Use Add folders to Ctrl/Shift-select several artist folders at once. Drag a track onto a radio row, or select both and choose Assign selected.\nThe app converts MP3, WAV, FLAC, AAC, M4A, WMA, and OGG to 48 kHz 16-bit PCM while building.",
             AutoSize = true,
             Margin = new Padding(0, 8, 0, 0)
         }, 0, 2);
@@ -383,7 +383,7 @@ public sealed class MainForm : Form
             progress.Report($"Reading music from {folders.Length} folder(s)...");
             var files = folders
                 .SelectMany(folder => Directory.EnumerateFiles(folder, "*.*", SearchOption.TopDirectoryOnly))
-                .Where(file => file.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase) || file.EndsWith(".wav", StringComparison.OrdinalIgnoreCase))
+                .Where(AudioConversionService.IsSupportedFile)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .OrderBy(file => Path.GetFileName(file), StringComparer.OrdinalIgnoreCase)
                 .ThenBy(file => file, StringComparer.OrdinalIgnoreCase)
@@ -400,7 +400,7 @@ public sealed class MainForm : Form
                     progress.Report($"Skipped {Path.GetFileName(file)}: {exception.Message}");
                 }
             }
-            _musicCount.Text = $"{_tracks.Count} usable MP3/WAV file(s) from {folders.Length} folder(s)";
+            _musicCount.Text = $"{_tracks.Count} usable audio file(s) from {folders.Length} folder(s)";
             UpdateMusicListHorizontalExtent();
             _assignButton.Enabled = _tracks.Count > 0 && _slots.Count > 0;
         });
@@ -457,9 +457,9 @@ public sealed class MainForm : Form
 
     private void Assign(RadioSlot slot, string path)
     {
-        if (!File.Exists(path) || !IsSupportedAudioFile(path))
+        if (!File.Exists(path) || !AudioConversionService.IsSupportedFile(path))
         {
-            MessageBox.Show(this, "Select an MP3 or WAV file.", "Unsupported audio", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(this, "Select MP3, WAV, FLAC, AAC, M4A, WMA, or OGG audio.", "Unsupported audio", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
         slot.ReplacementPath = path;
@@ -568,8 +568,8 @@ public sealed class MainForm : Form
     private static bool TryExtractAudioPath(IDataObject? data, out string? path)
     {
         path = data?.GetData(DataFormats.UnicodeText) as string;
-        if (path is not null && IsSupportedAudioFile(path)) return true;
-        if (data?.GetData(DataFormats.FileDrop) is string[] files && files.Length == 1 && IsSupportedAudioFile(files[0]))
+        if (path is not null && AudioConversionService.IsSupportedFile(path)) return true;
+        if (data?.GetData(DataFormats.FileDrop) is string[] files && files.Length == 1 && AudioConversionService.IsSupportedFile(files[0]))
         {
             path = files[0];
             return true;
@@ -578,6 +578,4 @@ public sealed class MainForm : Form
         return false;
     }
 
-    private static bool IsSupportedAudioFile(string path) =>
-        path.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".wav", StringComparison.OrdinalIgnoreCase);
 }

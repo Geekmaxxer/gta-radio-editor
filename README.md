@@ -10,7 +10,7 @@ It reads a radio `.rpf`, finds the actual music containers, lets the user link M
 - Lists discovered archives in a station dropdown using familiar station names, such as West Coast Classics and Radio Los Santos, rather than only archive codes.
 - Opens the selected station and detects its stereo music AWC containers.
 - Excludes short station IDs and imaging clips, so the West Coast Classics source archive reports its 29 music slots.
-- Loads MP3/WAV files from one or more music folders. The native folder picker supports Ctrl/Shift multi-selection, so several artist folders can be added in one action.
+- Loads `.mp3`, `.wav`, `.flac`, `.aac`, `.m4a`, `.wma`, and Ogg Vorbis `.ogg` files from one or more music folders. The native folder picker supports Ctrl/Shift multi-selection, so several artist folders can be added in one action.
 - Assigns a track to any radio slot through drag-and-drop, double-click assignment, or ordered auto-fill.
 - Converts each assignment to two 48 kHz, 16-bit PCM mono channels while retaining the original stereo image.
 - Rebuilds the matching AWC data while preserving the original container metadata and radio events.
@@ -20,8 +20,8 @@ It reads a radio `.rpf`, finds the actual music containers, lets the user link M
 
 - Windows 10/11 x64.
 - A GTA V directory containing RPF archives compatible with CodeWalker. The station finder supports varied folder layouts, but encrypted archives still require compatible archive keys.
-- MP3 or PCM WAV input. MP3 decoding uses the Windows media components available on a normal GTA V Windows installation.
-- A mods-folder loader such as OpenIV.asi to make GTA V use the finished RPF. (This is optional for the most part on ports)
+- MP3, WAV, FLAC, AAC, M4A, WMA, or Ogg Vorbis input. AAC/M4A/WMA/FLAC decoding uses Windows Media Foundation; Windows N installations may need the Media Feature Pack.
+- A mods-folder loader such as OpenIV.asi to make GTA V use the finished RPF. This is optional for most ports.
 
 ## Use
 
