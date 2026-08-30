@@ -21,7 +21,7 @@ It reads a radio `.rpf`, finds the actual music containers, lets the user link M
 - Windows 10/11 x64.
 - A GTA V directory containing RPF archives compatible with CodeWalker. The station finder supports varied folder layouts, but encrypted archives still require compatible archive keys.
 - MP3 or PCM WAV input. MP3 decoding uses the Windows media components available on a normal GTA V Windows installation.
-- A mods-folder loader such as OpenIV.asi to make GTA V use the finished RPF.
+- A mods-folder loader such as OpenIV.asi to make GTA V use the finished RPF. (This is optional for the most part on ports)
 
 ## Use
 
