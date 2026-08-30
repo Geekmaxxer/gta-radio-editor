@@ -31,9 +31,10 @@ It reads a radio `.rpf`, finds the actual music containers, lets the user link M
 4. Click **Add folders**, Ctrl/Shift-select one or more music folders, and confirm once.
 5. Drag a music entry from the right-hand list onto a radio slot, or select both and use **Assign selected**. `Auto-fill in order` is available when a deliberate order is not important.
 6. Click **Build output RPF** and select a new folder. Keep the prefilled original RPF file name unchanged; the application will refuse to overwrite the selected source archive or rebuild under a different name.
-7. Put the output in the equivalent path under GTA V's `mods` folder. For example:
+7. Put the output in the equivalent path under GTA V's architecture folder. For example:
 
-   `mods\x64\audio\sfx\RADIO_09_HIPHOP_OLD.rpf`
+   `\x64\audio\sfx\RADIO_09_HIPHOP_OLD.rpf` or
+   `\switch\audio\sfx\RADIO_09_HIPHOP_OLD.rpf`
 
    Do not use modified audio in GTA Online.
 
@@ -63,9 +64,9 @@ dotnet run -c Release -- --scan "C:\Path\To\RADIO_09_HIPHOP_OLD.rpf"
 
 - The station finder is path-layout independent: it works whether a compatible archive is stored below `x64`, `switch`, or another port-specific directory. Archive parsing/rebuilding remains limited to formats and encryption keys supported by CodeWalker.
 - The app builds a direct AWC/RPF result internally; it does not create temporary OpenIV `.oac` files because that intermediate step is no longer necessary.
-- The output RPF is a new file. This provides a simple rollback path: delete its copy from `mods` to restore the game archive.
+- The output RPF is a new file. This provides a simple rollback path: create a backup of the original RPF file to make sure you can rollback safely.
 
-## Third-party code
+## Credits
 
 - [CodeWalker Core](https://github.com/dexyfex/CodeWalker) is included as a git submodule for RPF/AWC parsing and serialization. Its notices are in `vendor/CodeWalker/Notice.txt`.
 - [NAudio](https://github.com/naudio/NAudio) is used for input audio decoding and resampling.
