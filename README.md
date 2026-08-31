@@ -43,7 +43,7 @@ It reads a radio `.rpf`, finds the actual music containers, lets the user link M
 Clone with submodules so the bundled CodeWalker Core project is present:
 
 ```powershell
-git clone --recurse-submodules <your-repository-url>
+git clone --recurse-submodules https://github.com/Geekmaxxer/gta-radio-editor
 cd gta-radio-editor\GTARadioEditor
 dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
 ```
