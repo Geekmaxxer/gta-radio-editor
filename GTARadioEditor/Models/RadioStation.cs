@@ -4,9 +4,15 @@ public sealed record RadioStation(
     string RpfPath,
     string ArchiveCode,
     string StationName,
-    string RelativePath)
+    string RelativePath,
+    string? DisabledReason = null)
 {
-    public string DisplayName => $"{StationName} ({ArchiveCode})";
+    public bool IsAvailable => string.IsNullOrWhiteSpace(DisabledReason);
 
-    public string FullDisplayName => $"{DisplayName}{Environment.NewLine}{RelativePath}";
+    public string DisplayName => $"{StationName} ({ArchiveCode})" +
+        (IsAvailable ? string.Empty : " — unavailable");
+
+    public string FullDisplayName => IsAvailable
+        ? $"{DisplayName}{Environment.NewLine}{RelativePath}"
+        : $"{DisplayName}{Environment.NewLine}{DisabledReason}{Environment.NewLine}{RelativePath}";
 }

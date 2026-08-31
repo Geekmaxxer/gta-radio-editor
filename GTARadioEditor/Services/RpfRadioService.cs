@@ -53,11 +53,6 @@ public sealed class RpfRadioService
                 });
             }
 
-            if (slots.Count == 0)
-            {
-                throw new InvalidDataException("No two-channel music AWC containers were found. Select a GTA V Legacy radio RPF, not a general game archive.");
-            }
-
             progress?.Report($"Found {slots.Count} replaceable music containers.");
             return (IReadOnlyList<RadioSlot>)slots;
         }, cancellationToken);
@@ -68,6 +63,7 @@ public sealed class RpfRadioService
         string outputRpfPath,
         IEnumerable<RadioSlot> slots,
         IProgress<string>? progress = null,
+        IProgress<int>? buildProgress = null,
         CancellationToken cancellationToken = default)
     {
         var selected = slots.Where(slot => !string.IsNullOrWhiteSpace(slot.ReplacementPath)).ToList();
@@ -84,23 +80,27 @@ public sealed class RpfRadioService
             throw new InvalidOperationException("The output RPF must keep the source archive's file name. Choose a new folder, not a renamed archive, so encrypted RPF headers remain valid.");
         }
 
+        buildProgress?.Report(0);
         return await Task.Run(async () =>
         {
             var outputDirectory = Path.GetDirectoryName(outputRpfPath)
                 ?? throw new InvalidOperationException("The output path does not include a directory.");
             Directory.CreateDirectory(outputDirectory);
             File.Copy(sourceRpfPath, outputRpfPath, true);
+            buildProgress?.Report(5);
 
             try
             {
                 var rpf = OpenRpf(outputRpfPath, progress);
                 var notes = new List<string>();
                 var completed = 0;
+                buildProgress?.Report(10);
 
                 foreach (var slot in selected)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
                     var source = slot.ReplacementPath!;
+                    buildProgress?.Report(10 + completed * 85 / selected.Count);
                     progress?.Report($"Converting {Path.GetFileName(source)} ({completed + 1}/{selected.Count})...");
                     var converted = await AudioConversionService.ConvertToGtaStereoPairAsync(source, cancellationToken);
 
@@ -134,10 +134,12 @@ public sealed class RpfRadioService
                     RpfFile.CreateFile(entry.Parent, entry.Name, rebuiltAwc);
 
                     completed++;
+                    buildProgress?.Report(10 + completed * 85 / selected.Count);
                     notes.Add($"{slot.ContainerName} <- {Path.GetFileName(source)} ({converted.Duration:mm\\:ss})");
                 }
 
                 progress?.Report($"Built {Path.GetFileName(outputRpfPath)} with {completed} replacement(s).");
+                buildProgress?.Report(100);
                 return new BuildResult(outputRpfPath, completed, notes);
             }
             catch

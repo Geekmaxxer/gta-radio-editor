@@ -36,6 +36,19 @@ public sealed class GtaDirectoryService
             ["RADIO_37_MOTOMAMI"] = "MOTOMAMI Los Santos"
         };
 
+    // These archives are intentionally shown so users can see what was found in their
+    // game folder. The current editor only rebuilds conventional stereo music AWCs.
+    private static readonly IReadOnlyDictionary<string, string> DisabledStationReasons =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["RADIO_05_TALK_01"] = "Talk-radio archive: it contains spoken programming, not replaceable music tracks.",
+            ["RADIO_11_TALK_02"] = "Talk-radio archive: it contains spoken programming, not replaceable music tracks.",
+            ["RADIO_07_DANCE_01"] = "This dance station uses an audio container layout that is not supported yet.",
+            ["RADIO_14_DANCE_02"] = "This dance station uses an audio container layout that is not supported yet.",
+            ["RADIO_19_USER"] = "Self Radio does not contain built-in music tracks to replace.",
+            ["RADIO_36_AUDIOPLAYER"] = "Media Player does not contain built-in music tracks to replace."
+        };
+
     public async Task<IReadOnlyList<RadioStation>> DiscoverRadioStationsAsync(
         string gtaDirectory,
         IProgress<string>? progress = null,
@@ -99,7 +112,8 @@ public sealed class GtaDirectoryService
         var stationName = StationNames.TryGetValue(archiveCode, out var knownName)
             ? knownName
             : MakeFriendlyName(archiveCode);
-        return new RadioStation(archivePath, archiveCode, stationName, Path.GetRelativePath(root, archivePath));
+        DisabledStationReasons.TryGetValue(archiveCode, out var disabledReason);
+        return new RadioStation(archivePath, archiveCode, stationName, Path.GetRelativePath(root, archivePath), disabledReason);
     }
 
     private static IEnumerable<string> EnumerateRadioArchives(string directory)

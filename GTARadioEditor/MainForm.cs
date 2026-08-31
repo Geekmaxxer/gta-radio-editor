@@ -54,6 +54,15 @@ public sealed class MainForm : Form
     private readonly Button _scanButton = new() { Text = "Open selected station", AutoSize = true, Enabled = false };
     private readonly Button _buildButton = new() { Text = "Build output RPF", AutoSize = true, Enabled = false };
     private readonly Button _assignButton = new() { Text = "Assign selected", AutoSize = true, Enabled = false };
+    private readonly ProgressBar _buildProgress = new()
+    {
+        Dock = DockStyle.Fill,
+        Minimum = 0,
+        Maximum = 100,
+        Style = ProgressBarStyle.Continuous,
+        Visible = false
+    };
+    private readonly List<Control> _busyControls = [];
     private string? _selectedRpfPath;
     private CancellationTokenSource? _operationCancellation;
 
@@ -143,8 +152,11 @@ public sealed class MainForm : Form
         workflowSteps.Controls.Add(mappingStep, 1, 0);
 
         var buildStep = new GroupBox { Text = "4. Build", Dock = DockStyle.Fill };
-        var buildActions = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = false };
-        buildActions.Controls.Add(_buildButton);
+        var buildActions = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
+        buildActions.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        buildActions.RowStyles.Add(new RowStyle(SizeType.Absolute, 18));
+        buildActions.Controls.Add(_buildButton, 0, 0);
+        buildActions.Controls.Add(_buildProgress, 0, 1);
         buildStep.Controls.Add(buildActions);
         workflowSteps.Controls.Add(buildStep, 2, 0);
 
@@ -190,6 +202,22 @@ public sealed class MainForm : Form
         {
             button.Click += ButtonClick;
         }
+
+        _busyControls.AddRange([
+            browseGameButton,
+            rescanStationsButton,
+            addMusicButton,
+            clearMusicButton,
+            autoFillButton,
+            clearAssignmentsButton,
+            _gtaDirectoryPath,
+            _stationSelector,
+            _scanButton,
+            _buildButton,
+            _assignButton,
+            _slotGrid,
+            _musicList
+        ]);
     }
 
     private void ConfigureSlotGrid()
@@ -208,7 +236,15 @@ public sealed class MainForm : Form
         _slotGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "GTA radio slot", DataPropertyName = nameof(RadioSlot.ContainerName), FillWeight = 26 });
         _slotGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Original", DataPropertyName = nameof(RadioSlot.OriginalDuration), FillWeight = 12 });
         _slotGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Channels", DataPropertyName = nameof(RadioSlot.LeftChannelName), FillWeight = 23 });
-        _slotGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Replacement", DataPropertyName = nameof(RadioSlot.ReplacementDisplay), FillWeight = 39 });
+        _slotGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Replacement", DataPropertyName = nameof(RadioSlot.ReplacementDisplay), FillWeight = 31 });
+        _slotGrid.Columns.Add(new DataGridViewButtonColumn
+        {
+            Name = "ClearReplacement",
+            HeaderText = string.Empty,
+            Text = "Clear",
+            UseColumnTextForButtonValue = true,
+            FillWeight = 8
+        });
     }
 
     private void ConfigureInteractions()
@@ -244,6 +280,20 @@ public sealed class MainForm : Form
             }
         };
         _slotGrid.DoubleClick += (_, _) => AssignSelected();
+        _slotGrid.CellContentClick += (_, args) =>
+        {
+            if (args.RowIndex < 0 || _slotGrid.Columns[args.ColumnIndex].Name != "ClearReplacement")
+            {
+                return;
+            }
+
+            if (_slotGrid.Rows[args.RowIndex].DataBoundItem is RadioSlot slot && slot.ReplacementPath is not null)
+            {
+                slot.ReplacementPath = null;
+                RefreshSlots();
+                _status.Text = $"Cleared {slot.ContainerName}.";
+            }
+        };
         _stationSelector.SelectedIndexChanged += (_, _) => SelectStation();
         FormClosing += (_, _) => _operationCancellation?.Cancel();
     }
@@ -318,7 +368,7 @@ public sealed class MainForm : Form
         var station = _stationSelector.SelectedItem as RadioStation;
         _selectedRpfPath = station?.RpfPath;
         _musicToolTip.SetToolTip(_stationSelector, station?.FullDisplayName ?? string.Empty);
-        _scanButton.Enabled = station is not null;
+        _scanButton.Enabled = station?.IsAvailable == true;
         _buildButton.Enabled = false;
         _slots.Clear();
         _slotGrid.Refresh();
@@ -329,6 +379,13 @@ public sealed class MainForm : Form
             return;
         }
 
+        if (!station.IsAvailable)
+        {
+            _slotCount.Text = $"{station.StationName} is unavailable";
+            _status.Text = station.DisabledReason!;
+            return;
+        }
+
         _slotCount.Text = $"{station.StationName} selected. Open it to inspect its music slots.";
         _status.Text = $"Selected {station.DisplayName}.";
     }
@@ -336,16 +393,38 @@ public sealed class MainForm : Form
     private async Task ScanRpfAsync()
     {
         var rpfPath = _selectedRpfPath;
-        if (string.IsNullOrWhiteSpace(rpfPath) || !File.Exists(rpfPath)) return;
+        var station = _stationSelector.SelectedItem as RadioStation;
+        if (string.IsNullOrWhiteSpace(rpfPath) || !File.Exists(rpfPath) || station?.IsAvailable != true) return;
         await RunOperationAsync(async (progress, cancellationToken) =>
         {
             var slots = await _rpfService.ScanMusicSlotsAsync(rpfPath, progress, cancellationToken);
             _slots.Clear();
+
+            if (slots.Count == 0)
+            {
+                DisableStation(station, "No compatible stereo music slots were found in this archive.");
+                return;
+            }
+
             foreach (var slot in slots) _slots.Add(slot);
             _slotCount.Text = $"{slots.Count} replaceable music slot(s) detected";
             _buildButton.Enabled = slots.Count > 0;
             RefreshSlots();
         });
+    }
+
+    private void DisableStation(RadioStation station, string reason)
+    {
+        var stationIndex = _stations.IndexOf(station);
+        if (stationIndex < 0)
+        {
+            return;
+        }
+
+        _stations[stationIndex] = station with { DisabledReason = reason };
+        _stationSelector.SelectedIndex = stationIndex;
+        SelectStation();
+        AppendLog($"WARNING: {station.StationName} is unavailable. {reason}");
     }
 
     private async Task AddMusicFoldersAsync()
@@ -377,6 +456,7 @@ public sealed class MainForm : Form
             return;
         }
 
+        var skippedFiles = new List<string>();
         await RunOperationAsync(async (progress, cancellationToken) =>
         {
             _tracks.Clear();
@@ -397,13 +477,25 @@ public sealed class MainForm : Form
                 }
                 catch (Exception exception)
                 {
+                    skippedFiles.Add($"{Path.GetFileName(file)}: {exception.Message}");
                     progress.Report($"Skipped {Path.GetFileName(file)}: {exception.Message}");
                 }
             }
-            _musicCount.Text = $"{_tracks.Count} usable audio file(s) from {folders.Length} folder(s)";
+            _musicCount.Text = $"{_tracks.Count} usable audio file(s) from {folders.Length} folder(s)" +
+                (skippedFiles.Count == 0 ? string.Empty : $" ({skippedFiles.Count} skipped)");
             UpdateMusicListHorizontalExtent();
             _assignButton.Enabled = _tracks.Count > 0 && _slots.Count > 0;
         });
+
+        if (skippedFiles.Count > 0)
+        {
+            var details = string.Join(Environment.NewLine, skippedFiles.Take(8).Select(item => $"• {item}"));
+            var remaining = skippedFiles.Count - Math.Min(skippedFiles.Count, 8);
+            if (remaining > 0) details += $"{Environment.NewLine}• …and {remaining} more.";
+            MessageBox.Show(this,
+                $"{skippedFiles.Count} file(s) could not be decoded and were not added.{Environment.NewLine}{Environment.NewLine}{details}{Environment.NewLine}{Environment.NewLine}See the build log for the full list.",
+                "Music warnings", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
     }
 
     private void ClearMusicFolders()
@@ -497,15 +589,81 @@ public sealed class MainForm : Form
             Title = "Save rebuilt radio RPF"
         };
         if (dialog.ShowDialog(this) != DialogResult.OK) return;
+        if (!ConfirmBuild(dialog.FileName)) return;
 
-        await RunOperationAsync(async (progress, cancellationToken) =>
+        _buildProgress.Value = 0;
+        _buildProgress.Visible = true;
+        try
         {
-            var result = await _rpfService.BuildOutputAsync(rpfPath, dialog.FileName, _slots, progress, cancellationToken);
-            AppendLog($"\r\nSuccess: {result.ReplacedContainers} container(s) rebuilt.\r\nOutput: {result.OutputRpfPath}");
+            await RunOperationAsync(async (progress, cancellationToken) =>
+            {
+                var buildProgress = new Progress<int>(value => _buildProgress.Value = Math.Clamp(value, 0, 100));
+                var result = await _rpfService.BuildOutputAsync(rpfPath, dialog.FileName, _slots, progress, buildProgress, cancellationToken);
+                AppendLog($"\r\nSuccess: {result.ReplacedContainers} container(s) rebuilt.\r\nOutput: {result.OutputRpfPath}");
+                MessageBox.Show(this,
+                    $"Built {result.ReplacedContainers} replacement(s).\n\nCopy the output RPF into the matching path under your GTA V mods folder. Keep its file name unchanged.",
+                    "Build complete", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            });
+        }
+        finally
+        {
+            _buildProgress.Visible = false;
+            _buildProgress.Value = 0;
+        }
+    }
+
+    private bool ConfirmBuild(string outputPath)
+    {
+        var station = _stationSelector.SelectedItem as RadioStation;
+        var assigned = _slots.Where(slot => !string.IsNullOrWhiteSpace(slot.ReplacementPath)).ToList();
+        var unavailableSources = assigned
+            .Where(slot => !File.Exists(slot.ReplacementPath!) || !AudioConversionService.IsSupportedFile(slot.ReplacementPath!))
+            .Select(slot => Path.GetFileName(slot.ReplacementPath!))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (unavailableSources.Count > 0)
+        {
             MessageBox.Show(this,
-                $"Built {result.ReplacedContainers} replacement(s).\n\nCopy the output RPF into the matching path under your GTA V mods folder. Keep its file name unchanged.",
-                "Build complete", MessageBoxButtons.OK, MessageBoxIcon.Information);
-        });
+                $"These assigned files are missing or no longer supported:{Environment.NewLine}{Environment.NewLine}" +
+                string.Join(Environment.NewLine, unavailableSources.Select(file => $"- {file}")),
+                "Build blocked", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return false;
+        }
+
+        var warnings = new List<string>();
+        var unassignedCount = _slots.Count - assigned.Count;
+        if (unassignedCount > 0)
+        {
+            warnings.Add($"{unassignedCount} slot(s) are unassigned and will keep their original GTA audio.");
+        }
+
+        var duplicateAssignments = assigned
+            .GroupBy(slot => slot.ReplacementPath!, StringComparer.OrdinalIgnoreCase)
+            .Where(group => group.Count() > 1)
+            .Select(group => $"{Path.GetFileName(group.Key)} is assigned to {group.Count()} slots.")
+            .ToList();
+        warnings.AddRange(duplicateAssignments);
+
+        var review = new List<string>
+        {
+            "Ready to build:",
+            string.Empty,
+            $"Station: {station?.StationName ?? Path.GetFileNameWithoutExtension(_selectedRpfPath)}",
+            $"Replacements: {assigned.Count}/{_slots.Count}",
+            $"Output: {outputPath}"
+        };
+        if (warnings.Count > 0)
+        {
+            review.Add(string.Empty);
+            review.Add("Warnings:");
+            review.AddRange(warnings.Select(warning => $"- {warning}"));
+        }
+        review.Add(string.Empty);
+        review.Add("Build this RPF now?");
+
+        return MessageBox.Show(this, string.Join(Environment.NewLine, review), "Confirm build",
+            MessageBoxButtons.YesNo, warnings.Count > 0 ? MessageBoxIcon.Warning : MessageBoxIcon.Question,
+            MessageBoxDefaultButton.Button2) == DialogResult.Yes;
     }
 
     private async Task RunOperationAsync(Func<IProgress<string>, CancellationToken, Task> operation)
@@ -545,11 +703,13 @@ public sealed class MainForm : Form
     private void SetBusy(bool busy)
     {
         UseWaitCursor = busy;
-        foreach (var control in Controls.OfType<Control>()) control.Enabled = !busy;
+        foreach (var control in _busyControls) control.Enabled = !busy;
         if (!busy)
         {
-            _scanButton.Enabled = _stationSelector.SelectedItem is RadioStation;
-            _buildButton.Enabled = _slots.Count > 0;
+            var station = _stationSelector.SelectedItem as RadioStation;
+            _stationSelector.Enabled = _stations.Count > 0;
+            _scanButton.Enabled = station?.IsAvailable == true;
+            _buildButton.Enabled = station?.IsAvailable == true && _slots.Count > 0;
             _assignButton.Enabled = _tracks.Count > 0 && _slots.Count > 0;
         }
     }
