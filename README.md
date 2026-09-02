@@ -1,6 +1,6 @@
-# GTA Radio Editor
+# GTA 5 Port Radio Editor
 
-GTA Radio Editor is a Windows desktop app for replacing existing GTA V Legacy radio songs without hand-authoring a CSV, converting tracks manually, or importing dozens of `.oac` files one at a time.
+GTA 5 Port Radio Editor is a Windows desktop app for replacing existing (ported) GTA V Legacy radio songs without hand-authoring a CSV, converting tracks manually, or importing dozens of `.oac` files one at a time.
 
 It reads a radio `.rpf`, finds the actual music containers, lets the user link MP3/WAV files to slots by drag-and-drop, converts each assignment to GTA-compatible audio, and builds a **new** RPF. The source archive is never modified.
 
@@ -21,7 +21,8 @@ It reads a radio `.rpf`, finds the actual music containers, lets the user link M
 - Windows 10/11 x64.
 - A GTA V directory containing RPF archives compatible with CodeWalker. The station finder supports varied folder layouts, but encrypted archives still require compatible archive keys.
 - MP3, WAV, FLAC, AAC, M4A, WMA, or Ogg Vorbis input. AAC/M4A/WMA/FLAC decoding uses Windows Media Foundation; Windows N installations may need the Media Feature Pack.
-- A mods-folder loader such as OpenIV.asi to make GTA V use the finished RPF. This is optional for most ports.
+- A mods-folder loader such as OpenIV.asi to make GTA V use the finished RPF. This is 100% optional for most ports, only GTA 5 Legacy PC needs OpenIV.asi.
+- A normal GTA 5 Legacy PC install won't let you load it's tables/rpf files unless patched by a port or OpenIV.asi is installed.
 
 ## Use
 
