@@ -51,6 +51,7 @@ public sealed class MainForm : Form
     private readonly Label _musicCount = new() { AutoSize = true, Text = "No music folders loaded" };
     private readonly TextBox _log = new() { Dock = DockStyle.Fill, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, BackColor = SystemColors.Window };
     private readonly ToolStripStatusLabel _status = new() { Text = "Choose a GTA V folder to find its radio stations." };
+    private readonly ToolStripStatusLabel _versionStatus = new() { Text = $"v{AppVersion.Current}", ForeColor = SystemColors.GrayText };
     private readonly Button _scanButton = new() { Text = "Open selected station", AutoSize = true, Enabled = false };
     private readonly Button _buildButton = new() { Text = "Build output RPF", AutoSize = true, Enabled = false };
     private readonly Button _assignButton = new() { Text = "Assign selected", AutoSize = true, Enabled = false };
@@ -68,7 +69,7 @@ public sealed class MainForm : Form
 
     public MainForm()
     {
-        Text = "GTA Radio Editor";
+        Text = $"GTA Radio Editor v{AppVersion.Current}";
         MinimumSize = new Size(1080, 700);
         StartPosition = FormStartPosition.CenterScreen;
         Font = new Font("Segoe UI", 9F);
@@ -195,7 +196,10 @@ public sealed class MainForm : Form
         root.Controls.Add(logPanel, 0, 2);
 
         var statusStrip = new StatusStrip();
+        _status.Spring = true;
+        _versionStatus.Font = new Font(Font.FontFamily, Math.Max(Font.Size - 1f, 7f));
         statusStrip.Items.Add(_status);
+        statusStrip.Items.Add(_versionStatus);
         root.Controls.Add(statusStrip, 0, 3);
 
         foreach (var button in new[] { browseGameButton, rescanStationsButton, addMusicButton, clearMusicButton, autoFillButton, clearAssignmentsButton })
@@ -338,6 +342,21 @@ public sealed class MainForm : Form
         _scanButton.Click += async (_, _) => await ScanRpfAsync();
         _assignButton.Click += (_, _) => AssignSelected();
         _buildButton.Click += async (_, _) => await BuildOutputAsync();
+        _ = CheckForUpdatesAsync();
+    }
+
+    private async Task CheckForUpdatesAsync()
+    {
+        var result = await UpdateChecker.CheckAsync();
+
+        if (IsDisposed || !IsHandleCreated)
+            return;
+
+        if (result is not { UpdateAvailable: true })
+            return;
+
+        using var dialog = new UpdateAvailableDialog(result.CurrentVersion, result.LatestVersion, result.ReleaseUrl);
+        dialog.ShowDialog(this);
     }
 
     private async Task ScanGtaDirectoryAsync(string gtaDirectory)

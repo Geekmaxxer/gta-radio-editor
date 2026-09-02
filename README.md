@@ -60,6 +60,30 @@ For a read-only diagnostic of a radio RPF from source, run:
 dotnet run -c Release -- --scan "C:\Path\To\RADIO_09_HIPHOP_OLD.rpf"
 ```
 
+## Update checking
+
+On startup, the app silently checks
+[`/releases/latest`](https://github.com/Geekmaxxer/gta-radio-editor/releases/latest)
+on GitHub and compares its tag to the running app's version (shown in small
+text in the status bar, and in the title bar). That endpoint always
+resolves to the newest published, non-draft, non-prerelease release, so a
+beta build with a higher-looking version number - like the earlier
+`v0.1-beta`/`v0.2-beta`/`v0.3-beta` tags - is never mistaken for the latest
+stable release.
+
+If a newer version is found, a small dialog offers **Take me there** (opens
+the release page in your browser) or **I'm good** (dismisses it for the
+rest of that session). There's no persisted "don't ask again" - closing and
+reopening the app checks again.
+
+If you're maintaining this repo: bump `AppVersion.Current` in
+`AppVersion.cs` (and `<Version>` in the `.csproj`) every time you cut a new
+version, and make sure it's published as an actual GitHub **Release** with
+the "pre-release" checkbox left unchecked - a bare git tag, or a release
+still flagged as pre-release, won't be picked up by `/releases/latest`. If
+the check fails for any reason (offline, rate-limited, no stable release
+published yet), it fails silently and the app works normally.
+
 ## Notes on compatibility
 
 - The station finder is path-layout independent: it works whether a compatible archive is stored below `x64`, `switch`, or another port-specific directory. Archive parsing/rebuilding remains limited to formats and encryption keys supported by CodeWalker.
