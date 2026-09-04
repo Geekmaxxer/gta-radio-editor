@@ -92,6 +92,7 @@ public sealed class RpfRadioService
             try
             {
                 var rpf = OpenRpf(outputRpfPath, progress);
+                ConvertOutputToOpenRpf(rpf, progress);
                 var notes = new List<string>();
                 var completed = 0;
                 buildProgress?.Report(10);
@@ -177,9 +178,7 @@ public sealed class RpfRadioService
 
     private static void EnsureKeysAreAvailable(string rpfPath, IProgress<string>? progress)
     {
-        if (GTA5Keys.PC_AES_KEY is not null &&
-            GTA5Keys.PC_NG_ENCRYPT_TABLES is not null &&
-            GTA5Keys.PC_NG_ENCRYPT_LUTs is not null)
+        if (GTA5Keys.PC_AES_KEY is not null)
         {
             return;
         }
@@ -193,7 +192,17 @@ public sealed class RpfRadioService
 
         progress?.Report("Loading encryption keys from the selected GTA V installation...");
         GTA5Keys.LoadFromPath(gameRoot);
-        GTA5Keys.EnsureEncryptionTables(progress is null ? null : progress.Report);
+    }
+
+    private static void ConvertOutputToOpenRpf(RpfFile rpf, IProgress<string>? progress)
+    {
+        if (rpf.Encryption == RpfEncryption.OPEN)
+        {
+            return;
+        }
+
+        progress?.Report("Preparing the output RPF for mod use...");
+        RpfFile.EnsureValidEncryption(rpf, _ => true, recursive: true);
     }
 
     private static string? FindGameRoot(string rpfPath)
