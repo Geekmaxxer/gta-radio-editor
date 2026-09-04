@@ -46,12 +46,16 @@ Clone with submodules so the bundled CodeWalker Core project is present:
 ```powershell
 git clone --recurse-submodules https://github.com/Geekmaxxer/gta-radio-editor
 cd gta-radio-editor\GTARadioEditor
-dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
+dotnet restore .\GTARadioEditor\GTARadioEditor.csproj
+dotnet msbuild GTARadioEditor\GTARadioEditor.csproj `
+  -target:BuildNet48SingleExe `
+  -property:Configuration=Release `
+  -property:TargetFramework=net48
 ```
 
 The self-contained Windows build is written to:
 
-`GTARadioEditor\bin\Release\net10.0-windows\win-x64\publish\`
+`GTARadioEditor\bin\Release\net48`
 
 `GTARadioEditor.exe` is self-contained. The adjacent `.pdb` file, if emitted, is only for debugging and is not needed to run the app.
 
