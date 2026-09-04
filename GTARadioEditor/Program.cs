@@ -11,7 +11,12 @@ internal static class Program
             return;
         }
 
+#if NET48
+        Application.EnableVisualStyles();
+        Application.SetCompatibleTextRenderingDefault(false);
+#else
         ApplicationConfiguration.Initialize();
+#endif
         Application.Run(new MainForm());
     }
 

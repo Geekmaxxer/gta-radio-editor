@@ -2,17 +2,18 @@ using System.Runtime.InteropServices;
 
 namespace GTARadioEditor.Services;
 
-/// <summary>Shows the native Windows folder picker with Ctrl/Shift multi-selection enabled.</summary>
 public static class MultiFolderPicker
 {
     private const int UserCancelled = unchecked((int)0x800704C7);
 
     public static IReadOnlyList<string> Pick(IWin32Window owner, string title)
     {
+#if !NET48
         if (!OperatingSystem.IsWindows())
         {
             return [];
         }
+#endif
 
         var dialog = (IFileOpenDialog)new FileOpenDialog();
         IShellItemArray? results = null;

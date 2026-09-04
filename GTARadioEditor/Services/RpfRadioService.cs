@@ -177,7 +177,9 @@ public sealed class RpfRadioService
 
     private static void EnsureKeysAreAvailable(string rpfPath, IProgress<string>? progress)
     {
-        if (GTA5Keys.PC_AES_KEY is not null)
+        if (GTA5Keys.PC_AES_KEY is not null &&
+            GTA5Keys.PC_NG_ENCRYPT_TABLES is not null &&
+            GTA5Keys.PC_NG_ENCRYPT_LUTs is not null)
         {
             return;
         }
@@ -191,6 +193,7 @@ public sealed class RpfRadioService
 
         progress?.Report("Loading encryption keys from the selected GTA V installation...");
         GTA5Keys.LoadFromPath(gameRoot);
+        GTA5Keys.EnsureEncryptionTables(progress is null ? null : progress.Report);
     }
 
     private static string? FindGameRoot(string rpfPath)

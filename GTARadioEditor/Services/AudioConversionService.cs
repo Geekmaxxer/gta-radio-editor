@@ -142,7 +142,7 @@ public static class AudioConversionService
 
     private static void WritePcm16(byte[] destination, int offset, float sample)
     {
-        var clamped = Math.Clamp(sample, -1f, 1f);
+        var clamped = PlatformCompatibility.Clamp(sample, -1f, 1f);
         var value = (short)Math.Round(clamped * short.MaxValue, MidpointRounding.AwayFromZero);
         destination[offset] = (byte)(value & 0xFF);
         destination[offset + 1] = (byte)((value >> 8) & 0xFF);
@@ -169,4 +169,39 @@ public static class AudioConversionService
         writer.Flush();
         return output.ToArray();
     }
+}
+internal static class PlatformCompatibility
+{
+    public static int Clamp(int value, int minimum, int maximum) =>
+        value < minimum ? minimum : value > maximum ? maximum : value;
+
+    public static float Clamp(float value, float minimum, float maximum) =>
+        value < minimum ? minimum : value > maximum ? maximum : value;
+
+    public static string GetRelativePath(string relativeTo, string path)
+    {
+#if NET48
+        var basePath = EnsureTrailingSeparator(Path.GetFullPath(relativeTo));
+        var relativeUri = new Uri(basePath).MakeRelativeUri(new Uri(Path.GetFullPath(path)));
+        return Uri.UnescapeDataString(relativeUri.ToString()).Replace('/', Path.DirectorySeparatorChar);
+#else
+        return Path.GetRelativePath(relativeTo, path);
+#endif
+    }
+
+#if NET48
+    private const int EmSetCueBanner = 0x1501;
+
+    public static void SetCueBanner(TextBox textBox, string text)
+    {
+        SendMessage(textBox.Handle, EmSetCueBanner, IntPtr.Zero, text);
+    }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+    private static extern IntPtr SendMessage(IntPtr windowHandle, int message, IntPtr wParam, string lParam);
+#endif
+    private static string EnsureTrailingSeparator(string path) =>
+        path.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal)
+            ? path
+            : path + Path.DirectorySeparatorChar;
 }

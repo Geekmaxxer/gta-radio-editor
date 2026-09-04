@@ -36,8 +36,6 @@ public sealed class GtaDirectoryService
             ["RADIO_37_MOTOMAMI"] = "MOTOMAMI Los Santos"
         };
 
-    // These archives are intentionally shown so users can see what was found in their
-    // game folder. The current editor only rebuilds conventional stereo music AWCs.
     private static readonly IReadOnlyDictionary<string, string> DisabledStationReasons =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
@@ -67,8 +65,9 @@ public sealed class GtaDirectoryService
             directories.Enqueue(root);
             var directoriesScanned = 0;
 
-            while (directories.TryDequeue(out var directory))
+            while (directories.Count > 0)
             {
+                var directory = directories.Dequeue();
                 cancellationToken.ThrowIfCancellationRequested();
                 directoriesScanned++;
                 if (directoriesScanned == 1 || directoriesScanned % 100 == 0)
@@ -113,7 +112,7 @@ public sealed class GtaDirectoryService
             ? knownName
             : MakeFriendlyName(archiveCode);
         DisabledStationReasons.TryGetValue(archiveCode, out var disabledReason);
-        return new RadioStation(archivePath, archiveCode, stationName, Path.GetRelativePath(root, archivePath), disabledReason);
+        return new RadioStation(archivePath, archiveCode, stationName, PlatformCompatibility.GetRelativePath(root, archivePath), disabledReason);
     }
 
     private static IEnumerable<string> EnumerateRadioArchives(string directory)
@@ -165,11 +164,13 @@ public sealed class GtaDirectoryService
     }
 
     private static bool IsNonStationArchive(string archiveCode) =>
-        archiveCode.Contains("ADVERT", StringComparison.OrdinalIgnoreCase) ||
-        archiveCode.Contains("NEWS", StringComparison.OrdinalIgnoreCase);
+        archiveCode.IndexOf("ADVERT", StringComparison.OrdinalIgnoreCase) >= 0 ||
+        archiveCode.IndexOf("NEWS", StringComparison.OrdinalIgnoreCase) >= 0;
+
+    private static string RemovePrefix(string value, string prefix) =>
+        value.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) ? value.Substring(prefix.Length) : value;
 
     private static string MakeFriendlyName(string archiveCode) =>
-        archiveCode
-            .Replace("RADIO_", string.Empty, StringComparison.OrdinalIgnoreCase)
+        RemovePrefix(archiveCode, "RADIO_")
             .Replace('_', ' ');
 }

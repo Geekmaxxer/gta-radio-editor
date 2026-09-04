@@ -2,23 +2,30 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net10.0-windows</TargetFramework>
+    <TargetFrameworks>net10.0-windows;net48</TargetFrameworks>
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AssemblyName>GTARadioEditor</AssemblyName>
     <RootNamespace>GTARadioEditor</RootNamespace>
     <Version>0.4</Version>
     <AssemblyVersion>0.4.0.0</AssemblyVersion>
     <FileVersion>0.4.0.0</FileVersion>
-    <PublishSingleFile>true</PublishSingleFile>
-    <SelfContained>true</SelfContained>
-    <IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
     <DebugType>none</DebugType>
     <DebugSymbols>false</DebugSymbols>
     <CopyOutputSymbolsToPublishDirectory>false</CopyOutputSymbolsToPublishDirectory>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-windows'">
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>true</SelfContained>
+    <IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net48'">
+    <PublishSingleFile>false</PublishSingleFile>
+    <SelfContained>false</SelfContained>
   </PropertyGroup>
 
   <ItemGroup>
@@ -26,5 +33,24 @@
     <PackageReference Include="NAudio.Vorbis" Version="1.5.0" />
     <ProjectReference Include="..\vendor\CodeWalker\CodeWalker.Core\CodeWalker.Core.csproj" />
   </ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+    <PackageReference Include="System.Text.Json" Version="8.0.5" />
+    <Reference Include="System.Net.Http" />
+    <PackageReference Include="Fody" Version="6.9.3" PrivateAssets="all" />
+    <PackageReference Include="Costura.Fody" Version="6.2.0" PrivateAssets="all" />
+  </ItemGroup>
 
+<Target Name="PrepareNet48SingleExe">
+  <ItemGroup>
+    <Net48SingleExeSidecars Include="$(MSBuildProjectDirectory)\bin\$(Configuration)\net48\*.dll" />
+    <Net48SingleExeSidecars Include="$(MSBuildProjectDirectory)\bin\$(Configuration)\net48\$(AssemblyName).exe.config" />
+    <Net48SingleExeSidecars Include="$(MSBuildProjectDirectory)\bin\$(Configuration)\net48\$(AssemblyName).pdb" />
+    <Net48SingleExeSidecars Include="$(MSBuildProjectDirectory)\bin\$(Configuration)\net48\CodeWalker.Core.pdb" />
+    <Net48SingleExeSidecars Include="$(MSBuildProjectDirectory)\bin\$(Configuration)\net48\ShadersGen9Conversion.xml" />
+    <Net48SingleExeSidecars Include="$(MSBuildProjectDirectory)\bin\$(Configuration)\net48\strings.txt" />
+  </ItemGroup>
+  <Delete Files="@(Net48SingleExeSidecars)" />
+</Target>
+<Target Name="BuildNet48SingleExe" DependsOnTargets="Build;PrepareNet48SingleExe" />
 </Project>

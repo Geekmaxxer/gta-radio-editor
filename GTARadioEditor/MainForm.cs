@@ -18,7 +18,9 @@ public sealed class MainForm : Form
     {
         Dock = DockStyle.Fill,
         ReadOnly = true,
+#if !NET48
         PlaceholderText = "Choose the GTA V game or port folder"
+#endif
     };
     private readonly ComboBox _stationSelector = new()
     {
@@ -31,7 +33,9 @@ public sealed class MainForm : Form
     {
         Dock = DockStyle.Fill,
         ReadOnly = true,
+#if !NET48
         PlaceholderText = "Add music folders: MP3, WAV, FLAC, AAC, M4A, WMA, or OGG"
+#endif
     };
     private readonly DataGridView _slotGrid = new();
     private readonly ListBox _musicList = new()
@@ -75,6 +79,10 @@ public sealed class MainForm : Form
         Font = new Font("Segoe UI", 9F);
 
         BuildInterface();
+#if NET48
+        PlatformCompatibility.SetCueBanner(_gtaDirectoryPath, "Choose the GTA V game or port folder");
+        PlatformCompatibility.SetCueBanner(_musicPath, "Add music folders: MP3, WAV, FLAC, AAC, M4A, WMA, or OGG");
+#endif
         ConfigureInteractions();
     }
 
@@ -416,7 +424,7 @@ public sealed class MainForm : Form
         if (string.IsNullOrWhiteSpace(rpfPath) || !File.Exists(rpfPath) || station?.IsAvailable != true) return;
         await RunOperationAsync(async (progress, cancellationToken) =>
         {
-            var slots = await _rpfService.ScanMusicSlotsAsync(rpfPath, progress, cancellationToken);
+            var slots = await _rpfService.ScanMusicSlotsAsync(rpfPath!, progress, cancellationToken);
             _slots.Clear();
 
             if (slots.Count == 0)
@@ -545,7 +553,7 @@ public sealed class MainForm : Form
         }
 
         var preferredLeftWidth = (int)Math.Round(availableWidth * 0.60);
-        _workspace.SplitterDistance = Math.Clamp(preferredLeftWidth, SlotPaneMinimumWidth, availableWidth - MusicPaneMinimumWidth);
+        _workspace.SplitterDistance = PlatformCompatibility.Clamp(preferredLeftWidth, SlotPaneMinimumWidth, availableWidth - MusicPaneMinimumWidth);
         _workspace.Panel1MinSize = SlotPaneMinimumWidth;
         _workspace.Panel2MinSize = MusicPaneMinimumWidth;
     }
@@ -616,8 +624,8 @@ public sealed class MainForm : Form
         {
             await RunOperationAsync(async (progress, cancellationToken) =>
             {
-                var buildProgress = new Progress<int>(value => _buildProgress.Value = Math.Clamp(value, 0, 100));
-                var result = await _rpfService.BuildOutputAsync(rpfPath, dialog.FileName, _slots, progress, buildProgress, cancellationToken);
+                var buildProgress = new Progress<int>(value => _buildProgress.Value = PlatformCompatibility.Clamp(value, 0, 100));
+                var result = await _rpfService.BuildOutputAsync(rpfPath!, dialog.FileName, _slots, progress, buildProgress, cancellationToken);
                 AppendLog($"\r\nSuccess: {result.ReplacedContainers} container(s) rebuilt.\r\nOutput: {result.OutputRpfPath}");
                 MessageBox.Show(this,
                     $"Built {result.ReplacedContainers} replacement(s).\n\nCopy the output RPF into the matching path under your GTA V mods folder. Keep its file name unchanged.",
