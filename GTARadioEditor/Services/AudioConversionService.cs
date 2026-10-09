@@ -73,9 +73,10 @@ public static class AudioConversionService
             }
             leftStream.Write(leftPcm, 0, frames * 2);
             rightStream.Write(rightPcm, 0, frames * 2);
-            outputFrames += frames;
+            outputFrames = checked(outputFrames + frames);
         }
 
+        if (outputFrames == 0) throw new InvalidDataException("The replacement audio contains no decoded samples.");
         var duration = TimeSpan.FromSeconds(outputFrames / (double)GtaSampleRate);
         return new ConvertedRadioAudio(BuildMonoPcmWave(leftStream.ToArray()), BuildMonoPcmWave(rightStream.ToArray()), outputFrames, duration);
     }

@@ -22,4 +22,5 @@ public sealed record AudioTrack(string FilePath, TimeSpan Duration)
 
 public sealed record ConvertedRadioAudio(byte[] LeftWave, byte[] RightWave, int SampleCount, TimeSpan Duration);
 
-public sealed record BuildResult(string OutputRpfPath, int ReplacedContainers, IReadOnlyList<string> Messages);
+public sealed record BuildResult(string OutputRpfPath, int ReplacedContainers, IReadOnlyList<string> Messages,
+    string SourceTimingPath, string OutputTimingPath);

@@ -37,6 +37,8 @@ public sealed class MainForm : Form
         PlaceholderText = "Add music folders: MP3, WAV, FLAC, AAC, M4A, WMA, or OGG"
 #endif
     };
+    private readonly TextBox _timingPath = new() { Dock = DockStyle.Fill, ReadOnly = true };
+    private readonly Button _browseTimingButton = new() { Text = "Browse...", AutoSize = true };
     private readonly DataGridView _slotGrid = new();
     private readonly ListBox _musicList = new()
     {
@@ -73,7 +75,7 @@ public sealed class MainForm : Form
 
     public MainForm()
     {
-        Text = $"GTA Radio Editor v{AppVersion.Current}";
+        Text = $"GTA Radio Editor v{AppVersion.Current} - Stable";
         MinimumSize = new Size(1080, 700);
         StartPosition = FormStartPosition.CenterScreen;
         Font = new Font("Segoe UI", 9F);
@@ -95,7 +97,7 @@ public sealed class MainForm : Form
             RowCount = 4,
             Padding = new Padding(14),
         };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 190));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 225));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 115));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -107,23 +109,39 @@ public sealed class MainForm : Form
             ColumnCount = 1,
             RowCount = 2
         };
-        setup.RowStyles.Add(new RowStyle(SizeType.Absolute, 95));
+        setup.RowStyles.Add(new RowStyle(SizeType.Absolute, 130));
         setup.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
         var browseGameButton = new Button { Text = "Browse...", AutoSize = true, Tag = "gta-directory" };
         var rescanStationsButton = new Button { Text = "Rescan", AutoSize = true, Tag = "rescan-stations" };
         var gameAndStationStep = new GroupBox { Text = "1. Select the GTA V folder and radio station", Dock = DockStyle.Fill, Margin = new Padding(0, 0, 0, 6) };
-        var gameAndStationLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 2 };
+        var gameAndStationLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 3 };
         gameAndStationLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         gameAndStationLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         gameAndStationLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        gameAndStationLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
-        gameAndStationLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+        gameAndStationLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 33));
+        gameAndStationLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 33));
+        gameAndStationLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 34));
         gameAndStationLayout.Controls.Add(new Label { Text = "GTA V folder", AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(3, 0, 8, 0) }, 0, 0);
         gameAndStationLayout.Controls.Add(_gtaDirectoryPath, 1, 0);
         gameAndStationLayout.Controls.Add(browseGameButton, 2, 0);
         gameAndStationLayout.Controls.Add(new Label { Text = "Radio station", AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(3, 0, 8, 0) }, 0, 1);
         gameAndStationLayout.Controls.Add(_stationSelector, 1, 1);
+        gameAndStationLayout.Controls.Add(new Label { Text = "Radio timing file", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 2);
+        gameAndStationLayout.Controls.Add(_timingPath, 1, 2);
+        gameAndStationLayout.Controls.Add(_browseTimingButton, 2, 2);
+        _musicToolTip.SetToolTip(_timingPath, "Base stations normally use audio_rel.rpf. For DLC stations, choose the RPF containing that station's sounds.dat54.rel, or the extracted REL file.");
+        _busyControls.Add(_browseTimingButton);
+        _browseTimingButton.Click += (_, _) =>
+        {
+            using var dialog = new OpenFileDialog
+            {
+                Title = "Select the timing file for this radio station",
+                Filter = "Radio timing files (*.rpf;*.dat54.rel)|*.rpf;*.dat54.rel",
+                FileName = _timingPath.Text
+            };
+            if (dialog.ShowDialog(this) == DialogResult.OK) _timingPath.Text = dialog.FileName;
+        };
         var stationActions = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = false };
         stationActions.Controls.Add(_scanButton);
         stationActions.Controls.Add(rescanStationsButton);
@@ -393,6 +411,7 @@ public sealed class MainForm : Form
     private void SelectStation()
     {
         var station = _stationSelector.SelectedItem as RadioStation;
+        _timingPath.Text = station is null ? string.Empty : RadioTimingService.FindDefaultTimingPath(station.RpfPath) ?? string.Empty;
         _selectedRpfPath = station?.RpfPath;
         _musicToolTip.SetToolTip(_stationSelector, station?.FullDisplayName ?? string.Empty);
         _scanButton.Enabled = station?.IsAvailable == true;
@@ -625,10 +644,13 @@ public sealed class MainForm : Form
             await RunOperationAsync(async (progress, cancellationToken) =>
             {
                 var buildProgress = new Progress<int>(value => _buildProgress.Value = PlatformCompatibility.Clamp(value, 0, 100));
-                var result = await _rpfService.BuildOutputAsync(rpfPath!, dialog.FileName, _slots, progress, buildProgress, cancellationToken);
+                var result = await _rpfService.BuildOutputAsync(rpfPath!, dialog.FileName, _slots, _timingPath.Text, progress, buildProgress, cancellationToken);
                 AppendLog($"\r\nSuccess: {result.ReplacedContainers} container(s) rebuilt.\r\nOutput: {result.OutputRpfPath}");
+                foreach (var message in result.Messages) AppendLog(message);
+                var sourceRadioRelative = PlatformCompatibility.GetRelativePath(_gtaDirectoryPath.Text, rpfPath!);
+                var timingInstallPath = DescribeTimingInstallPath(rpfPath!, result.SourceTimingPath);
                 MessageBox.Show(this,
-                    $"Built {result.ReplacedContainers} replacement(s).\n\nCopy the output RPF into the matching path under your GTA V mods folder. Keep its file name unchanged.",
+                    $"Built {result.ReplacedContainers} replacement(s) with matching song durations and retimed cues.\n\nInstall both outputs at their original game paths (or the equivalent mods paths):\n\n{result.OutputRpfPath}\n → {sourceRadioRelative}\n\n{result.OutputTimingPath}\n → {timingInstallPath}\n\nKeep both file names unchanged. The timing file is required for correct playback.",
                     "Build complete", MessageBoxButtons.OK, MessageBoxIcon.Information);
             });
         }
@@ -639,8 +661,27 @@ public sealed class MainForm : Form
         }
     }
 
+    private string DescribeTimingInstallPath(string radioPath, string timingPath)
+    {
+        if (timingPath.EndsWith(".dat54.rel", StringComparison.OrdinalIgnoreCase))
+            return $"Import {Path.GetFileName(timingPath)} into its original entry in the game's timing archive.";
+        var gameRoot = Path.GetFullPath(_gtaDirectoryPath.Text).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        if (Path.GetFullPath(timingPath).StartsWith(gameRoot, StringComparison.OrdinalIgnoreCase))
+            return PlatformCompatibility.GetRelativePath(gameRoot, timingPath);
+        var originalTimingPath = RadioTimingService.FindDefaultTimingPath(radioPath);
+        if (originalTimingPath is not null && Path.GetFileName(originalTimingPath).Equals(Path.GetFileName(timingPath), StringComparison.OrdinalIgnoreCase))
+            return PlatformCompatibility.GetRelativePath(gameRoot, originalTimingPath);
+        return $"Replace this station's original timing archive ({Path.GetFileName(timingPath)}) at its original game path.";
+    }
+
     private bool ConfirmBuild(string outputPath)
     {
+        if (string.IsNullOrWhiteSpace(_timingPath.Text) || !File.Exists(_timingPath.Text))
+        {
+            MessageBox.Show(this, "Select the timing file for this station. Base stations normally use audio_rel.rpf; DLC stations need the archive containing their sounds.dat54.rel.",
+                "Radio timing required", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return false;
+        }
         var station = _stationSelector.SelectedItem as RadioStation;
         var assigned = _slots.Where(slot => !string.IsNullOrWhiteSpace(slot.ReplacementPath)).ToList();
         var unavailableSources = assigned
@@ -658,6 +699,8 @@ public sealed class MainForm : Form
         }
 
         var warnings = new List<string>();
+        var timingOutput = Path.Combine(Path.GetDirectoryName(outputPath)!, Path.GetFileName(_timingPath.Text));
+        if (File.Exists(timingOutput)) warnings.Add($"The existing timing output will be replaced: {timingOutput}");
         var unassignedCount = _slots.Count - assigned.Count;
         if (unassignedCount > 0)
         {
@@ -677,7 +720,9 @@ public sealed class MainForm : Form
             string.Empty,
             $"Station: {station?.StationName ?? Path.GetFileNameWithoutExtension(_selectedRpfPath)}",
             $"Replacements: {assigned.Count}/{_slots.Count}",
-            $"Output: {outputPath}"
+            $"Radio output: {outputPath}",
+            $"Timing output: {timingOutput}",
+            "Song durations and cue positions will follow the converted audio. Install both outputs."
         };
         if (warnings.Count > 0)
         {

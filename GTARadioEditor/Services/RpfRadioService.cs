@@ -1,5 +1,6 @@
 using CodeWalker.GameFiles;
 using GTARadioEditor.Models;
+using System.Security.Cryptography;
 
 namespace GTARadioEditor.Services;
 
@@ -62,6 +63,7 @@ public sealed class RpfRadioService
         string sourceRpfPath,
         string outputRpfPath,
         IEnumerable<RadioSlot> slots,
+        string sourceTimingPath,
         IProgress<string>? progress = null,
         IProgress<int>? buildProgress = null,
         CancellationToken cancellationToken = default)
@@ -80,20 +82,39 @@ public sealed class RpfRadioService
             throw new InvalidOperationException("The output RPF must keep the source archive's file name. Choose a new folder, not a renamed archive, so encrypted RPF headers remain valid.");
         }
 
+        sourceRpfPath = Path.GetFullPath(sourceRpfPath);
+        sourceTimingPath = Path.GetFullPath(sourceTimingPath);
+        outputRpfPath = Path.GetFullPath(outputRpfPath);
+        var outputTimingPath = Path.Combine(Path.GetDirectoryName(outputRpfPath)!, Path.GetFileName(sourceTimingPath));
+        var sources = new[] { sourceRpfPath, sourceTimingPath }.Concat(selected.Select(s => Path.GetFullPath(s.ReplacementPath!))).ToList();
+        if (new[] { outputRpfPath, outputTimingPath }.Any(output => sources.Contains(output, StringComparer.OrdinalIgnoreCase)))
+            throw new InvalidOperationException("Choose a new output folder. Outputs must not overwrite source archives, timing metadata or replacement audio.");
+        var sharedArchive = sourceRpfPath.Equals(sourceTimingPath, StringComparison.OrdinalIgnoreCase);
+        if (!sharedArchive && outputTimingPath.Equals(outputRpfPath, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("The radio and timing sources have conflicting output file names.");
+
         buildProgress?.Report(0);
         return await Task.Run(async () =>
         {
+            progress?.Report("Matching radio songs to streaming durations...");
+            var timing = RadioTimingService.Open(sourceTimingPath, sourceRpfPath, selected, progress, cancellationToken);
             var outputDirectory = Path.GetDirectoryName(outputRpfPath)
                 ?? throw new InvalidOperationException("The output path does not include a directory.");
             Directory.CreateDirectory(outputDirectory);
-            File.Copy(sourceRpfPath, outputRpfPath, true);
-            buildProgress?.Report(5);
-
+            var stagingDirectory = Path.Combine(outputDirectory, ".gta-radio-build-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(stagingDirectory);
+            var stagedRadioPath = Path.Combine(stagingDirectory, Path.GetFileName(outputRpfPath));
+            var stagedTimingPath = Path.Combine(stagingDirectory, Path.GetFileName(sourceTimingPath));
+            var published = false;
             try
             {
-                var rpf = OpenRpf(outputRpfPath, progress);
+                File.Copy(sourceRpfPath, stagedRadioPath);
+                if (!sharedArchive) File.Copy(sourceTimingPath, stagedTimingPath);
+                buildProgress?.Report(5);
+                var rpf = OpenRpf(stagedRadioPath, progress);
                 ConvertOutputToOpenRpf(rpf, progress);
                 var notes = new List<string>();
+                var expectedAudio = new Dictionary<string, (int Samples, byte[] Hash)>(StringComparer.OrdinalIgnoreCase);
                 var completed = 0;
                 buildProgress?.Report(10);
 
@@ -106,17 +127,21 @@ public sealed class RpfRadioService
                     var converted = await AudioConversionService.ConvertToGtaStereoPairAsync(source, cancellationToken);
 
                     var entry = rpf.AllEntries.OfType<RpfFileEntry>()
-                        .SingleOrDefault(item => item.Name.Equals(slot.ContainerName, StringComparison.OrdinalIgnoreCase));
+                        .SingleOrDefault(item => item.Path.Equals(slot.ContainerPath, StringComparison.OrdinalIgnoreCase));
                     if (entry is null)
                     {
                         throw new InvalidDataException($"{slot.ContainerName} is no longer present in the output RPF.");
                     }
 
-                    var awc = LoadAwc(entry);
+                    var awc = LoadAwc(entry, sourceRpfPath);
                     var pair = FindStereoPair(awc)
                         ?? throw new InvalidDataException($"{slot.ContainerName} no longer has a supported left/right channel pair.");
 
                     progress?.Report($"Rebuilding {slot.ContainerName}...");
+                    if (pair.Left.SampleCount != pair.Right.SampleCount || pair.Left.SamplesPerSecond != pair.Right.SamplesPerSecond)
+                        throw new InvalidDataException($"{slot.ContainerName} has unequal stereo channel lengths or sample rates.");
+                    RadioCueService.Retime(awc, pair.Left.SampleCount, converted.SampleCount);
+                    timing.SetDuration(slot, converted.SampleCount);
                     ReplaceChannel(pair.Left, converted.LeftWave, converted.SampleCount);
                     ReplaceChannel(pair.Right, converted.RightWave, converted.SampleCount);
                     if (awc.MultiChannelFlag && awc.MultiChannelSource is not null)
@@ -133,35 +158,65 @@ public sealed class RpfRadioService
                     var rebuiltAwc = awc.Save();
                     ValidateRebuiltAwc(rebuiltAwc, entry.Name, converted.SampleCount);
                     RpfFile.CreateFile(entry.Parent, entry.Name, rebuiltAwc);
+                    using (var sha = SHA256.Create())
+                        expectedAudio.Add(slot.ContainerPath, (converted.SampleCount, sha.ComputeHash(rebuiltAwc)));
 
                     completed++;
                     buildProgress?.Report(10 + completed * 85 / selected.Count);
                     notes.Add($"{slot.ContainerName} <- {Path.GetFileName(source)} ({converted.Duration:mm\\:ss})");
                 }
 
+                cancellationToken.ThrowIfCancellationRequested();
+                progress?.Report("Writing and validating radio timing metadata...");
+                timing.Write(stagedTimingPath, progress);
+                var finalRadio = OpenRpf(stagedRadioPath, progress);
+                foreach (var slot in selected)
+                {
+                    var finalEntry = finalRadio.AllEntries.OfType<RpfFileEntry>().Single(e => e.Path.Equals(slot.ContainerPath, StringComparison.OrdinalIgnoreCase));
+                    var data = finalEntry.File.ExtractFile(finalEntry);
+                    var expected = expectedAudio[slot.ContainerPath];
+                    ValidateRebuiltAwc(data, finalEntry.Name, expected.Samples);
+                    using var sha = SHA256.Create();
+                    if (!sha.ComputeHash(data).SequenceEqual(expected.Hash))
+                        throw new InvalidDataException($"The packaged {finalEntry.Name} differs from the validated audio.");
+                }
+                cancellationToken.ThrowIfCancellationRequested();
+                var outputs = new List<(string Staged, string Output)> { (stagedRadioPath, outputRpfPath) };
+                if (!sharedArchive) outputs.Add((stagedTimingPath, outputTimingPath));
+                CommitOutputs(outputs, stagingDirectory);
+                published = true;
+                notes.Add($"Timing metadata: {outputTimingPath}. Install it into the matching original game archive; both outputs are required.");
                 progress?.Report($"Built {Path.GetFileName(outputRpfPath)} with {completed} replacement(s).");
                 buildProgress?.Report(100);
-                return new BuildResult(outputRpfPath, completed, notes);
+                return new BuildResult(outputRpfPath, completed, notes, sourceTimingPath, outputTimingPath);
             }
-            catch
+            finally
             {
-                if (File.Exists(outputRpfPath))
+                if (published || !Directory.EnumerateFiles(stagingDirectory, "*.backup").Any())
                 {
-                    File.Delete(outputRpfPath);
+                    try { Directory.Delete(stagingDirectory, true); }
+                    catch (IOException) { progress?.Report($"Temporary build files could not be removed: {stagingDirectory}"); }
+                    catch (UnauthorizedAccessException) { progress?.Report($"Temporary build files could not be removed: {stagingDirectory}"); }
                 }
-                throw;
             }
         }, cancellationToken);
     }
 
-    private static RpfFile OpenRpf(string rpfPath, IProgress<string>? progress)
+    internal static RpfFile OpenRpf(string rpfPath, IProgress<string>? progress)
     {
         if (!File.Exists(rpfPath))
         {
             throw new FileNotFoundException("The selected RPF file does not exist.", rpfPath);
         }
 
-        EnsureKeysAreAvailable(rpfPath, progress);
+        using (var reader = new BinaryReader(File.OpenRead(rpfPath)))
+        {
+            if (reader.BaseStream.Length < 16) throw new InvalidDataException("The selected RPF header is incomplete.");
+            reader.BaseStream.Position = 12;
+            var encryption = (RpfEncryption)reader.ReadUInt32();
+            if (encryption == RpfEncryption.AES || encryption == RpfEncryption.NG)
+                EnsureKeysAreAvailable(rpfPath, progress);
+        }
         var errors = new List<string>();
         var rpf = new RpfFile(rpfPath, Path.GetFileName(rpfPath));
         rpf.ScanStructure(progress is null ? null : progress.Report, errors.Add);
@@ -176,9 +231,9 @@ public sealed class RpfRadioService
         return rpf;
     }
 
-    private static void EnsureKeysAreAvailable(string rpfPath, IProgress<string>? progress)
+    private static void EnsureKeysAreAvailable(string rpfPath, IProgress<string>? progress, bool needsAwcKey = false)
     {
-        if (GTA5Keys.PC_AES_KEY is not null)
+        if (needsAwcKey ? GTA5Keys.PC_AWC_KEY is not null : GTA5Keys.PC_AES_KEY is not null)
         {
             return;
         }
@@ -192,15 +247,12 @@ public sealed class RpfRadioService
 
         progress?.Report("Loading encryption keys from the selected GTA V installation...");
         GTA5Keys.LoadFromPath(gameRoot);
+        if (needsAwcKey && GTA5Keys.PC_AWC_KEY is null)
+            throw new InvalidOperationException("Could not load the audio encryption key from this GTA V installation.");
     }
 
-    private static void ConvertOutputToOpenRpf(RpfFile rpf, IProgress<string>? progress)
+    internal static void ConvertOutputToOpenRpf(RpfFile rpf, IProgress<string>? progress)
     {
-        if (rpf.Encryption == RpfEncryption.OPEN)
-        {
-            return;
-        }
-
         progress?.Report("Preparing the output RPF for mod use...");
         RpfFile.EnsureValidEncryption(rpf, _ => true, recursive: true);
     }
@@ -219,10 +271,17 @@ public sealed class RpfRadioService
         return null;
     }
 
-    private static AwcFile LoadAwc(RpfFileEntry entry)
+    private static AwcFile LoadAwc(RpfFileEntry entry, string? keySourcePath = null)
     {
         var bytes = entry.File.ExtractFile(entry)
             ?? throw new InvalidDataException($"Could not extract {entry.Name} from the RPF.");
+        if (bytes.Length >= 8 && GTA5Keys.PC_AWC_KEY is null)
+        {
+            var magic = BitConverter.ToUInt32(bytes, 0);
+            var encrypted = (magic != 0x54414441 && magic != 0x41444154) ||
+                ((bytes[magic == 0x41444154 ? 7 : 6] & 10) != 0);
+            if (encrypted) EnsureKeysAreAvailable(keySourcePath ?? entry.File.FilePath, null, needsAwcKey: true);
+        }
         var awc = new AwcFile();
         awc.Load(bytes, entry);
         if (awc.ErrorMessage is not null)
@@ -269,6 +328,46 @@ public sealed class RpfRadioService
         if (pair.Left.SampleCount != expectedSampleCount || pair.Right.SampleCount != expectedSampleCount)
         {
             throw new InvalidDataException($"The rebuilt {awcName} has an unexpected sample count.");
+        }
+        if (pair.Left.SamplesPerSecond != AudioConversionService.GtaSampleRate ||
+            pair.Right.SamplesPerSecond != AudioConversionService.GtaSampleRate ||
+            validation.Streams.Any(s => (s.MarkersChunk?.Markers ?? []).Any(m => m.SampleOffset > expectedSampleCount)))
+            throw new InvalidDataException($"The rebuilt {awcName} has invalid audio timing or cues.");
+    }
+
+    private static void CommitOutputs(IReadOnlyList<(string Staged, string Output)> files, string stagingDirectory)
+    {
+        var committed = new List<(string Output, string? Backup)>();
+        try
+        {
+            foreach (var file in files)
+            {
+                string? backup = null;
+                if (File.Exists(file.Output))
+                {
+                    backup = Path.Combine(stagingDirectory, Guid.NewGuid().ToString("N") + ".backup");
+                    File.Replace(file.Staged, file.Output, backup);
+                }
+                else File.Move(file.Staged, file.Output);
+                committed.Add((file.Output, backup));
+            }
+        }
+        catch (Exception commitError)
+        {
+            try
+            {
+                foreach (var file in committed.AsEnumerable().Reverse())
+                {
+                    if (file.Backup is not null) File.Replace(file.Backup, file.Output, null);
+                    else File.Delete(file.Output);
+                }
+            }
+            catch (Exception rollbackError)
+            {
+                throw new IOException($"Could not finish the output files or restore earlier outputs. Recovery files are retained in {stagingDirectory}.",
+                    new AggregateException(commitError, rollbackError));
+            }
+            throw;
         }
     }
 }
