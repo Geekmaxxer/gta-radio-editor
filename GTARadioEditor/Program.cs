@@ -25,7 +25,7 @@ internal static class Program
         var service = new Services.RpfRadioService();
         var progress = new Progress<string>(Console.WriteLine);
         var slots = await service.ScanMusicSlotsAsync(rpfPath, progress);
-        Console.WriteLine($"Found {slots.Count} music slot(s):");
+        Console.WriteLine(L.T("Found {0} music slot(s):", slots.Count));
         foreach (var slot in slots)
         {
             Console.WriteLine($"{slot.ContainerName} [{slot.OriginalDuration:mm\\:ss}]");

@@ -6,12 +6,16 @@ It reads a radio `.rpf`, finds the actual music containers, lets the user link m
 
 ## What it does
 
+- Offers English, Spanish, Russian, Simplified Chinese, Portuguese and German in the **Language** selector. The choice is remembered, and changing it updates the interface without clearing loaded music or assignments.
+- Stores all six translations in `GTARadioEditor/Locales/*.json`, including the English catalog. These files are embedded in the EXE, so no translation files need to be installed separately.
 - Starts from a selected GTA V game or port directory and recursively discovers `RADIO_*.rpf` archives, without assuming an `x64`, `switch`, or fixed `sfx` folder path.
 - Lists discovered archives in a station dropdown using familiar station names, such as West Coast Classics and Radio Los Santos, rather than only archive codes.
 - Opens the selected station and detects its stereo music AWC containers.
 - Excludes short station IDs and imaging clips, so the West Coast Classics source archive reports its 29 music slots.
 - Loads `.mp3`, `.wav`, `.flac`, `.aac`, `.m4a`, `.wma`, and Ogg Vorbis `.ogg` files from one or more music folders. The native folder picker supports Ctrl/Shift multi-selection, so several artist folders can be added in one action.
 - Assigns a track to any radio slot through drag-and-drop, double-click assignment, or ordered auto-fill.
+- **Random Auto-fill** shuffles loaded tracks and assigns them without repeating tracks within a fill. Both auto-fill actions replace the current assignment list; slots beyond the number of loaded tracks keep their original GTA audio.
+- **Clear All Replaced** removes every replacement assignment while keeping the loaded music and original game files.
 - Converts each assignment to two 48 kHz, 16-bit PCM mono channels while retaining the original stereo image.
 - Calculates each song's duration from the actual converted sample count, including resampling and decoder output.
 - Matches the station/container and left/right waveform hashes to streaming sounds in `sounds.dat54.rel` or the DLC's `*_sounds.dat54.rel`, then patches their duration in milliseconds.
@@ -31,11 +35,13 @@ It reads a radio `.rpf`, finds the actual music containers, lets the user link m
 ## Use
 
 1. Launch `GTARadioEditor.exe`.
+   Choose your preferred language from **Language**. The setting is saved in `%LOCALAPPDATA%\GTARadioEditor\settings.json`. Windows' own dialog buttons follow the Windows language.
 2. Choose the GTA V game or port directory. The app finds `RADIO_*.rpf` files anywhere under it.
 3. Select a friendly station name from the **Radio station** dropdown, then click **Open selected station**. The table lists only real music slots.
    Check **Radio timing file**. The app selects the nearby `audio_rel.rpf` when present. Use **Browse...** to select a different timing RPF or extracted `.dat54.rel`, especially for DLC stations. Missing matches block the build with an explanation.
 4. Click **Add folders**, Ctrl/Shift-select one or more music folders, and confirm once.
 5. Drag a music entry from the right-hand list onto a radio slot, or select both and use **Assign selected**. `Auto-fill in order` is available when a deliberate order is not important.
+   Use **Random Auto-fill** to shuffle assignments, or **Clear All Replaced** to reset all replacement selections.
 6. Click **Build output RPF** and select a new folder. Keep the prefilled original RPF file name unchanged. Both outputs are saved in this folder, using their original names. The app refuses to overwrite source files.
 7. Install **both outputs** at the paths shown when the build finishes. For a base Switch station, for example:
 

@@ -36,10 +36,10 @@ public sealed class RadioTimingService
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 documents.Add(new TimingDocument(entry.File.ExtractFile(entry)
-                    ?? throw new InvalidDataException($"Cannot extract {entry.Path}."), entry.Path));
+                    ?? throw new InvalidDataException(L.T("Cannot extract {0}.", entry.Path)), entry.Path));
             }
         }
-        else throw new InvalidOperationException("Select the radio timing RPF or a sounds.dat54.rel file.");
+        else throw new InvalidOperationException(L.T("Select the radio timing RPF or a sounds.dat54.rel file."));
 
         var targets = new Dictionary<RadioSlot, List<TimingTarget>>();
         foreach (var slot in slots)
@@ -64,12 +64,12 @@ public sealed class RadioTimingService
                     if (!resolved || leaves.Any(s => !IsChannel(s)) ||
                         !leaves.Any(s => ((uint)s.FileName & 0x1FFFFFFF) == left) ||
                         !leaves.Any(s => ((uint)s.FileName & 0x1FFFFFFF) == right))
-                        throw new InvalidDataException($"{slot.ContainerName} uses a shared or unsupported streaming sound. Its timing cannot be changed safely.");
+                        throw new InvalidDataException(L.T("{0} uses a shared or unsupported streaming sound. Its timing cannot be changed safely.", slot.ContainerName));
                     matches.Add(new TimingTarget(document, streaming));
                 }
             }
             if (matches.Count == 0)
-                throw new InvalidDataException($"No streaming duration matched {slot.ContainerName} in {Path.GetFileName(timingPath)}. Select the timing archive for this station/version; base stations normally use audio_rel.rpf containing sounds.dat54.rel. No output has been built.");
+                throw new InvalidDataException(L.T("No streaming duration matched {0} in {1}. Select the timing archive for this station/version; base stations normally use audio_rel.rpf containing sounds.dat54.rel. No output has been built.", slot.ContainerName, Path.GetFileName(timingPath)));
             targets.Add(slot, matches);
         }
         return new TimingSession(documents, targets);
@@ -102,16 +102,16 @@ public sealed class RadioTimingService
             EntryPath = entryPath;
             Rel.Load(bytes, null);
             if (Rel.RelType != RelDatFileType.Dat54DataEntries)
-                throw new InvalidDataException("The selected sound metadata is not a dat54 REL file.");
+                throw new InvalidDataException(L.T("The selected sound metadata is not a dat54 REL file."));
         }
         public void Validate(byte[] bytes)
         {
-            if (!Bytes.SequenceEqual(bytes)) throw new InvalidDataException("The written radio timing data differs from the validated patch.");
+            if (!Bytes.SequenceEqual(bytes)) throw new InvalidDataException(L.T("The written radio timing data differs from the validated patch."));
             var check = new RelFile(); check.Load(bytes, null);
             foreach (var duration in Durations)
                 if (!check.RelDataDict.TryGetValue(duration.Key, out var data) ||
                     data is not Dat54StreamingSound sound || sound.Duration != duration.Value)
-                    throw new InvalidDataException("A rebuilt streaming duration failed validation.");
+                    throw new InvalidDataException(L.T("A rebuilt streaming duration failed validation."));
         }
     }
 
@@ -126,14 +126,14 @@ public sealed class RadioTimingService
 
         public void SetDuration(RadioSlot slot, int sampleCount)
         {
-            if (sampleCount <= 0) throw new InvalidDataException("Replacement audio is empty.");
+            if (sampleCount <= 0) throw new InvalidDataException(L.T("Replacement audio is empty."));
             var milliseconds = checked((int)((sampleCount * 1000L + AudioConversionService.GtaSampleRate - 1) / AudioConversionService.GtaSampleRate));
             foreach (var target in _targets[slot])
             {
                 // The fixed-size duration patch preserves every unknown record, index and relocation.
                 var offset = checked((int)(8 + target.Sound.DataOffset + 1 + target.Sound.Header.HeaderLength));
                 if (BitConverter.ToInt32(target.Document.Bytes, offset) != target.Sound.Duration)
-                    throw new InvalidDataException("Streaming duration offset verification failed.");
+                    throw new InvalidDataException(L.T("Streaming duration offset verification failed."));
                 Array.Copy(BitConverter.GetBytes(milliseconds), 0, target.Document.Bytes, offset, 4);
                 target.Sound.Duration = milliseconds;
                 target.Document.Durations[target.Sound.NameHash] = milliseconds;

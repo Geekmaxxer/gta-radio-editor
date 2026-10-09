@@ -1,5 +1,8 @@
 # v0.6 - Stable
 
+- Added a remembered language selector for English, Spanish, Russian, Simplified Chinese, Portuguese and German. All translations, including English, use JSON catalogs embedded in the EXE.
+- Added **Random Auto-fill** to shuffle loaded songs into radio slots without reusing tracks within a fill.
+- Renamed **Clear assignments** to **Clear All Replaced**; it clears every replacement selection and keeps the music library loaded.
 - Replacement songs now build with matching radio timing metadata, using the actual converted audio length.
 - DJ and other timed radio cues move with the replacement song's length.
 - The app finds the nearby base-game timing archive and lets you choose a DLC timing archive or extracted sounds REL.

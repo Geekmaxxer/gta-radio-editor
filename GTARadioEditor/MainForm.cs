@@ -14,12 +14,18 @@ public sealed class MainForm : Form
     private readonly BindingList<AudioTrack> _tracks = [];
     private readonly BindingList<RadioStation> _stations = [];
     private readonly List<string> _musicFolders = [];
+    private readonly ComboBox _languageSelector = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 155 };
+    private readonly Dictionary<Control, string> _textKeys = new();
+    private readonly Dictionary<DataGridViewColumn, string> _headerKeys = new();
+    private readonly Button _randomFillButton = new() { Text = L.T("Random Auto-fill"), AutoSize = true, Tag = "random" };
+    private int _skippedMusicFiles;
+    private bool _changingLanguage;
     private readonly TextBox _gtaDirectoryPath = new()
     {
         Dock = DockStyle.Fill,
         ReadOnly = true,
 #if !NET48
-        PlaceholderText = "Choose the GTA V game or port folder"
+        PlaceholderText = L.T("Choose the GTA V game or port folder")
 #endif
     };
     private readonly ComboBox _stationSelector = new()
@@ -34,11 +40,11 @@ public sealed class MainForm : Form
         Dock = DockStyle.Fill,
         ReadOnly = true,
 #if !NET48
-        PlaceholderText = "Add music folders: MP3, WAV, FLAC, AAC, M4A, WMA, or OGG"
+        PlaceholderText = L.T("Add music folders: MP3, WAV, FLAC, AAC, M4A, WMA, or OGG")
 #endif
     };
     private readonly TextBox _timingPath = new() { Dock = DockStyle.Fill, ReadOnly = true };
-    private readonly Button _browseTimingButton = new() { Text = "Browse...", AutoSize = true };
+    private readonly Button _browseTimingButton = new() { Text = L.T("Browse..."), AutoSize = true };
     private readonly DataGridView _slotGrid = new();
     private readonly ListBox _musicList = new()
     {
@@ -53,14 +59,14 @@ public sealed class MainForm : Form
         Margin = new Padding(0, 12, 0, 8)
     };
     private readonly ToolTip _musicToolTip = new();
-    private readonly Label _slotCount = new() { AutoSize = true, Text = "No RPF scanned" };
-    private readonly Label _musicCount = new() { AutoSize = true, Text = "No music folders loaded" };
+    private readonly Label _slotCount = new() { AutoSize = true, Text = L.T("No RPF scanned") };
+    private readonly Label _musicCount = new() { AutoSize = true, Text = L.T("No music folders loaded") };
     private readonly TextBox _log = new() { Dock = DockStyle.Fill, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, BackColor = SystemColors.Window };
-    private readonly ToolStripStatusLabel _status = new() { Text = "Choose a GTA V folder to find its radio stations." };
+    private readonly ToolStripStatusLabel _status = new() { Text = L.T("Choose a GTA V folder to find its radio stations.") };
     private readonly ToolStripStatusLabel _versionStatus = new() { Text = $"v{AppVersion.Current}", ForeColor = SystemColors.GrayText };
-    private readonly Button _scanButton = new() { Text = "Open selected station", AutoSize = true, Enabled = false };
-    private readonly Button _buildButton = new() { Text = "Build output RPF", AutoSize = true, Enabled = false };
-    private readonly Button _assignButton = new() { Text = "Assign selected", AutoSize = true, Enabled = false };
+    private readonly Button _scanButton = new() { Text = L.T("Open selected station"), AutoSize = true, Enabled = false };
+    private readonly Button _buildButton = new() { Text = L.T("Build output RPF"), AutoSize = true, Enabled = false };
+    private readonly Button _assignButton = new() { Text = L.T("Assign selected"), AutoSize = true, Enabled = false };
     private readonly ProgressBar _buildProgress = new()
     {
         Dock = DockStyle.Fill,
@@ -75,17 +81,24 @@ public sealed class MainForm : Form
 
     public MainForm()
     {
-        Text = $"GTA Radio Editor v{AppVersion.Current} - Stable";
-        MinimumSize = new Size(1080, 700);
+        BindingContext = new BindingContext();
+        Text = L.T("GTA Radio Editor v{0} - Stable", AppVersion.Current);
+        MinimumSize = new Size(1250, 740);
         StartPosition = FormStartPosition.CenterScreen;
         Font = new Font("Segoe UI", 9F);
 
         BuildInterface();
 #if NET48
-        PlatformCompatibility.SetCueBanner(_gtaDirectoryPath, "Choose the GTA V game or port folder");
-        PlatformCompatibility.SetCueBanner(_musicPath, "Add music folders: MP3, WAV, FLAC, AAC, M4A, WMA, or OGG");
+        PlatformCompatibility.SetCueBanner(_gtaDirectoryPath, L.T("Choose the GTA V game or port folder"));
+        PlatformCompatibility.SetCueBanner(_musicPath, L.T("Add music folders: MP3, WAV, FLAC, AAC, M4A, WMA, or OGG"));
 #endif
         ConfigureInteractions();
+        CaptureTextKeys(this);
+        foreach (DataGridViewColumn column in _slotGrid.Columns)
+            if (L.KeyForText(column.HeaderText) is string key) _headerKeys.Add(column, key);
+        L.LoadPreference();
+        ApplyLanguage();
+        L.Changed += ApplyLanguage;
     }
 
     private void BuildInterface()
@@ -97,7 +110,7 @@ public sealed class MainForm : Form
             RowCount = 4,
             Padding = new Padding(14),
         };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 225));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 315));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 115));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -107,14 +120,25 @@ public sealed class MainForm : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 2
+            RowCount = 3
         };
+        setup.RowStyles.Add(new RowStyle(SizeType.Absolute, 35));
         setup.RowStyles.Add(new RowStyle(SizeType.Absolute, 130));
         setup.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        var languagePanel = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = false };
+        languagePanel.Controls.Add(new Label { Text = L.T("Language"), AutoSize = true, Margin = new Padding(3, 7, 10, 0) });
+        _languageSelector.DataSource = L.Languages.ToList();
+        _languageSelector.SelectedIndexChanged += (_, _) =>
+        {
+            if (_languageSelector.SelectedItem is L.Language language && language.Code != L.Code)
+                L.SetLanguage(language.Code);
+        };
+        languagePanel.Controls.Add(_languageSelector);
+        setup.Controls.Add(languagePanel, 0, 0);
 
-        var browseGameButton = new Button { Text = "Browse...", AutoSize = true, Tag = "gta-directory" };
-        var rescanStationsButton = new Button { Text = "Rescan", AutoSize = true, Tag = "rescan-stations" };
-        var gameAndStationStep = new GroupBox { Text = "1. Select the GTA V folder and radio station", Dock = DockStyle.Fill, Margin = new Padding(0, 0, 0, 6) };
+        var browseGameButton = new Button { Text = L.T("Browse..."), AutoSize = true, Tag = "gta-directory" };
+        var rescanStationsButton = new Button { Text = L.T("Rescan"), AutoSize = true, Tag = "rescan-stations" };
+        var gameAndStationStep = new GroupBox { Text = L.T("1. Select the GTA V folder and radio station"), Dock = DockStyle.Fill, Margin = new Padding(0, 0, 0, 6) };
         var gameAndStationLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 3 };
         gameAndStationLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         gameAndStationLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
@@ -122,22 +146,22 @@ public sealed class MainForm : Form
         gameAndStationLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 33));
         gameAndStationLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 33));
         gameAndStationLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 34));
-        gameAndStationLayout.Controls.Add(new Label { Text = "GTA V folder", AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(3, 0, 8, 0) }, 0, 0);
+        gameAndStationLayout.Controls.Add(new Label { Text = L.T("GTA V folder"), AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(3, 0, 8, 0) }, 0, 0);
         gameAndStationLayout.Controls.Add(_gtaDirectoryPath, 1, 0);
         gameAndStationLayout.Controls.Add(browseGameButton, 2, 0);
-        gameAndStationLayout.Controls.Add(new Label { Text = "Radio station", AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(3, 0, 8, 0) }, 0, 1);
+        gameAndStationLayout.Controls.Add(new Label { Text = L.T("Radio station"), AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(3, 0, 8, 0) }, 0, 1);
         gameAndStationLayout.Controls.Add(_stationSelector, 1, 1);
-        gameAndStationLayout.Controls.Add(new Label { Text = "Radio timing file", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 2);
+        gameAndStationLayout.Controls.Add(new Label { Text = L.T("Radio timing file"), AutoSize = true, Anchor = AnchorStyles.Left }, 0, 2);
         gameAndStationLayout.Controls.Add(_timingPath, 1, 2);
         gameAndStationLayout.Controls.Add(_browseTimingButton, 2, 2);
-        _musicToolTip.SetToolTip(_timingPath, "Base stations normally use audio_rel.rpf. For DLC stations, choose the RPF containing that station's sounds.dat54.rel, or the extracted REL file.");
+        _musicToolTip.SetToolTip(_timingPath, L.T("Base stations normally use audio_rel.rpf. For DLC stations, choose the RPF containing that station's sounds.dat54.rel, or the extracted REL file."));
         _busyControls.Add(_browseTimingButton);
         _browseTimingButton.Click += (_, _) =>
         {
             using var dialog = new OpenFileDialog
             {
-                Title = "Select the timing file for this radio station",
-                Filter = "Radio timing files (*.rpf;*.dat54.rel)|*.rpf;*.dat54.rel",
+                Title = L.T("Select the timing file for this radio station"),
+                Filter = L.T("Radio timing files (*.rpf;*.dat54.rel)|*.rpf;*.dat54.rel"),
                 FileName = _timingPath.Text
             };
             if (dialog.ShowDialog(this) == DialogResult.OK) _timingPath.Text = dialog.FileName;
@@ -147,16 +171,16 @@ public sealed class MainForm : Form
         stationActions.Controls.Add(rescanStationsButton);
         gameAndStationLayout.Controls.Add(stationActions, 2, 1);
         gameAndStationStep.Controls.Add(gameAndStationLayout);
-        setup.Controls.Add(gameAndStationStep, 0, 0);
+        setup.Controls.Add(gameAndStationStep, 0, 1);
 
         var workflowSteps = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1 };
-        workflowSteps.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 48));
-        workflowSteps.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33));
-        workflowSteps.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 19));
+        workflowSteps.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 40));
+        workflowSteps.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 40));
+        workflowSteps.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 20));
 
-        var addMusicButton = new Button { Text = "Add folders...", AutoSize = true, Tag = "music" };
-        var clearMusicButton = new Button { Text = "Clear", AutoSize = true, Tag = "clear-music" };
-        var musicStep = new GroupBox { Text = "2. Add replacement music", Dock = DockStyle.Fill, Margin = new Padding(0, 0, 6, 0) };
+        var addMusicButton = new Button { Text = L.T("Add folders..."), AutoSize = true, Tag = "music" };
+        var clearMusicButton = new Button { Text = L.T("Clear"), AutoSize = true, Tag = "clear-music" };
+        var musicStep = new GroupBox { Text = L.T("2. Add replacement music"), Dock = DockStyle.Fill, Margin = new Padding(0, 0, 6, 0) };
         var musicStepLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1 };
         musicStepLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         musicStepLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
@@ -168,17 +192,18 @@ public sealed class MainForm : Form
         musicStep.Controls.Add(musicStepLayout);
         workflowSteps.Controls.Add(musicStep, 0, 0);
 
-        var autoFillButton = new Button { Text = "Auto-fill in order", AutoSize = true, Tag = "auto" };
-        var clearAssignmentsButton = new Button { Text = "Clear assignments", AutoSize = true, Tag = "clear" };
-        var mappingStep = new GroupBox { Text = "3. Map tracks to slots", Dock = DockStyle.Fill, Margin = new Padding(0, 0, 6, 0) };
-        var mappingActions = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = true };
+        var autoFillButton = new Button { Text = L.T("Auto-fill in order"), AutoSize = true, Tag = "auto" };
+        var clearAssignmentsButton = new Button { Text = L.T("Clear All Replaced"), AutoSize = true, Tag = "clear" };
+        var mappingStep = new GroupBox { Text = L.T("3. Map tracks to slots"), Dock = DockStyle.Fill, Margin = new Padding(0, 0, 6, 0) };
+        var mappingActions = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = true, AutoScroll = true };
         mappingActions.Controls.Add(_assignButton);
         mappingActions.Controls.Add(autoFillButton);
+        mappingActions.Controls.Add(_randomFillButton);
         mappingActions.Controls.Add(clearAssignmentsButton);
         mappingStep.Controls.Add(mappingActions);
         workflowSteps.Controls.Add(mappingStep, 1, 0);
 
-        var buildStep = new GroupBox { Text = "4. Build", Dock = DockStyle.Fill };
+        var buildStep = new GroupBox { Text = L.T("4. Build"), Dock = DockStyle.Fill };
         var buildActions = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
         buildActions.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         buildActions.RowStyles.Add(new RowStyle(SizeType.Absolute, 18));
@@ -187,7 +212,7 @@ public sealed class MainForm : Form
         buildStep.Controls.Add(buildActions);
         workflowSteps.Controls.Add(buildStep, 2, 0);
 
-        setup.Controls.Add(workflowSteps, 0, 1);
+        setup.Controls.Add(workflowSteps, 0, 2);
         _stationSelector.DataSource = _stations;
         root.Controls.Add(setup, 0, 0);
 
@@ -211,13 +236,13 @@ public sealed class MainForm : Form
         musicPanel.Controls.Add(_musicList, 0, 1);
         musicPanel.Controls.Add(new Label
         {
-            Text = "Use Add folders to Ctrl/Shift-select several artist folders at once. Drag a track onto a radio row, or select both and choose Assign selected.\nThe app converts MP3, WAV, FLAC, AAC, M4A, WMA, and OGG to 48 kHz 16-bit PCM while building.",
+            Text = L.T("Use Add folders to Ctrl/Shift-select several artist folders at once. Drag a track onto a radio row, or select both and choose Assign selected.\nThe app converts MP3, WAV, FLAC, AAC, M4A, WMA, and OGG to 48 kHz 16-bit PCM while building."),
             AutoSize = true,
             Margin = new Padding(0, 8, 0, 0)
         }, 0, 2);
         _workspace.Panel2.Controls.Add(musicPanel);
 
-        var logPanel = new GroupBox { Text = "Build log", Dock = DockStyle.Fill, Margin = new Padding(0, 0, 0, 8) };
+        var logPanel = new GroupBox { Text = L.T("Build log"), Dock = DockStyle.Fill, Margin = new Padding(0, 0, 0, 8) };
         logPanel.Controls.Add(_log);
         root.Controls.Add(logPanel, 0, 2);
 
@@ -228,7 +253,7 @@ public sealed class MainForm : Form
         statusStrip.Items.Add(_versionStatus);
         root.Controls.Add(statusStrip, 0, 3);
 
-        foreach (var button in new[] { browseGameButton, rescanStationsButton, addMusicButton, clearMusicButton, autoFillButton, clearAssignmentsButton })
+        foreach (var button in new[] { browseGameButton, rescanStationsButton, addMusicButton, clearMusicButton, autoFillButton, _randomFillButton, clearAssignmentsButton })
         {
             button.Click += ButtonClick;
         }
@@ -239,6 +264,8 @@ public sealed class MainForm : Form
             addMusicButton,
             clearMusicButton,
             autoFillButton,
+            _randomFillButton,
+            _languageSelector,
             clearAssignmentsButton,
             _gtaDirectoryPath,
             _stationSelector,
@@ -263,15 +290,15 @@ public sealed class MainForm : Form
         _slotGrid.RowHeadersVisible = false;
         _slotGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
         _slotGrid.DataSource = _slots;
-        _slotGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "GTA radio slot", DataPropertyName = nameof(RadioSlot.ContainerName), FillWeight = 26 });
-        _slotGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Original", DataPropertyName = nameof(RadioSlot.OriginalDuration), FillWeight = 12 });
-        _slotGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Channels", DataPropertyName = nameof(RadioSlot.LeftChannelName), FillWeight = 23 });
-        _slotGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Replacement", DataPropertyName = nameof(RadioSlot.ReplacementDisplay), FillWeight = 31 });
+        _slotGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = L.T("GTA radio slot"), DataPropertyName = nameof(RadioSlot.ContainerName), FillWeight = 26 });
+        _slotGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = L.T("Original"), DataPropertyName = nameof(RadioSlot.OriginalDuration), FillWeight = 12 });
+        _slotGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = L.T("Channels"), DataPropertyName = nameof(RadioSlot.LeftChannelName), FillWeight = 23 });
+        _slotGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = L.T("Replacement"), DataPropertyName = nameof(RadioSlot.ReplacementDisplay), FillWeight = 31 });
         _slotGrid.Columns.Add(new DataGridViewButtonColumn
         {
             Name = "ClearReplacement",
             HeaderText = string.Empty,
-            Text = "Clear",
+            Text = L.T("Clear"),
             UseColumnTextForButtonValue = true,
             FillWeight = 8
         });
@@ -321,10 +348,10 @@ public sealed class MainForm : Form
             {
                 slot.ReplacementPath = null;
                 RefreshSlots();
-                _status.Text = $"Cleared {slot.ContainerName}.";
+                _status.Text = L.T("Cleared {0}.", slot.ContainerName);
             }
         };
-        _stationSelector.SelectedIndexChanged += (_, _) => SelectStation();
+        _stationSelector.SelectedIndexChanged += (_, _) => { if (!_changingLanguage) SelectStation(); };
         FormClosing += (_, _) => _operationCancellation?.Cancel();
     }
 
@@ -337,7 +364,7 @@ public sealed class MainForm : Form
         switch (action)
         {
             case "gta-directory":
-                using (var dialog = new FolderBrowserDialog { Description = "Select the GTA V game or port folder" })
+                using (var dialog = new FolderBrowserDialog { Description = L.T("Select the GTA V game or port folder") })
                 {
                     if (dialog.ShowDialog(this) == DialogResult.OK) await ScanGtaDirectoryAsync(dialog.SelectedPath);
                 }
@@ -351,9 +378,13 @@ public sealed class MainForm : Form
             case "auto":
                 AutoAssign();
                 break;
+            case "random":
+                AutoAssign(randomize: true);
+                break;
             case "clear":
-                foreach (var slot in _slots) slot.ReplacementPath = null;
+                TrackAssignmentService.ClearAll(_slots);
                 RefreshSlots();
+                _status.Text = L.T("All replacements cleared.");
                 break;
             case "clear-music":
                 ClearMusicFolders();
@@ -403,8 +434,8 @@ public sealed class MainForm : Form
 
             _stationSelector.SelectedIndex = -1;
             _stationSelector.Enabled = _stations.Count > 0;
-            _slotCount.Text = $"{_stations.Count} radio station archive(s) found. Select one to continue.";
-            _status.Text = "Select a radio station to inspect its music slots.";
+            _slotCount.Text = L.T("{0} radio station archive(s) found. Select one to continue.", _stations.Count);
+            _status.Text = L.T("Select a radio station to inspect its music slots.");
         });
     }
 
@@ -421,19 +452,19 @@ public sealed class MainForm : Form
 
         if (station is null)
         {
-            _slotCount.Text = _stations.Count == 0 ? "No RPF scanned" : "Select a radio station to inspect";
+            _slotCount.Text = _stations.Count == 0 ? L.T("No RPF scanned") : L.T("Select a radio station to inspect");
             return;
         }
 
         if (!station.IsAvailable)
         {
-            _slotCount.Text = $"{station.StationName} is unavailable";
-            _status.Text = station.DisabledReason!;
+            _slotCount.Text = L.T("{0} is unavailable", station.StationName);
+            _status.Text = L.T(station.DisabledReason!);
             return;
         }
 
-        _slotCount.Text = $"{station.StationName} selected. Open it to inspect its music slots.";
-        _status.Text = $"Selected {station.DisplayName}.";
+        _slotCount.Text = L.T("{0} selected. Open it to inspect its music slots.", station.StationName);
+        _status.Text = L.T("Selected {0}.", station.DisplayName);
     }
 
     private async Task ScanRpfAsync()
@@ -453,7 +484,7 @@ public sealed class MainForm : Form
             }
 
             foreach (var slot in slots) _slots.Add(slot);
-            _slotCount.Text = $"{slots.Count} replaceable music slot(s) detected";
+            _slotCount.Text = L.T("{0} replaceable music slot(s) detected", slots.Count);
             _buildButton.Enabled = slots.Count > 0;
             RefreshSlots();
         });
@@ -470,12 +501,12 @@ public sealed class MainForm : Form
         _stations[stationIndex] = station with { DisabledReason = reason };
         _stationSelector.SelectedIndex = stationIndex;
         SelectStation();
-        AppendLog($"WARNING: {station.StationName} is unavailable. {reason}");
+        AppendLog(L.T("WARNING: {0} is unavailable. {1}", station.StationName, L.T(reason)));
     }
 
     private async Task AddMusicFoldersAsync()
     {
-        var selectedFolders = MultiFolderPicker.Pick(this, "Select one or more music folders (Ctrl/Shift to select several)");
+        var selectedFolders = MultiFolderPicker.Pick(this, L.T("Select one or more music folders (Ctrl/Shift to select several)"));
         var foldersAdded = selectedFolders
             .Where(Directory.Exists)
             .Where(path => !_musicFolders.Contains(path, StringComparer.OrdinalIgnoreCase))
@@ -506,7 +537,7 @@ public sealed class MainForm : Form
         await RunOperationAsync(async (progress, cancellationToken) =>
         {
             _tracks.Clear();
-            progress.Report($"Reading music from {folders.Length} folder(s)...");
+            progress.Report(L.T("Reading music from {0} folder(s)...", folders.Length));
             var files = folders
                 .SelectMany(folder => Directory.EnumerateFiles(folder, "*.*", SearchOption.TopDirectoryOnly))
                 .Where(AudioConversionService.IsSupportedFile)
@@ -524,23 +555,25 @@ public sealed class MainForm : Form
                 catch (Exception exception)
                 {
                     skippedFiles.Add($"{Path.GetFileName(file)}: {exception.Message}");
-                    progress.Report($"Skipped {Path.GetFileName(file)}: {exception.Message}");
+                    progress.Report(L.T("Skipped {0}: {1}", Path.GetFileName(file), exception.Message));
                 }
             }
-            _musicCount.Text = $"{_tracks.Count} usable audio file(s) from {folders.Length} folder(s)" +
-                (skippedFiles.Count == 0 ? string.Empty : $" ({skippedFiles.Count} skipped)");
+            _musicCount.Text = L.T("{0} usable audio file(s) from {1} folder(s)", _tracks.Count, folders.Length) +
+                (skippedFiles.Count == 0 ? string.Empty : L.T(" ({0} skipped)", skippedFiles.Count));
+            _skippedMusicFiles = skippedFiles.Count;
             UpdateMusicListHorizontalExtent();
             _assignButton.Enabled = _tracks.Count > 0 && _slots.Count > 0;
+            _randomFillButton.Enabled = _tracks.Count > 0 && _slots.Count > 0;
         });
 
         if (skippedFiles.Count > 0)
         {
             var details = string.Join(Environment.NewLine, skippedFiles.Take(8).Select(item => $"• {item}"));
             var remaining = skippedFiles.Count - Math.Min(skippedFiles.Count, 8);
-            if (remaining > 0) details += $"{Environment.NewLine}• …and {remaining} more.";
+            if (remaining > 0) details += L.T("{0}• …and {1} more.", Environment.NewLine, remaining);
             MessageBox.Show(this,
-                $"{skippedFiles.Count} file(s) could not be decoded and were not added.{Environment.NewLine}{Environment.NewLine}{details}{Environment.NewLine}{Environment.NewLine}See the build log for the full list.",
-                "Music warnings", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                L.T("{0} file(s) could not be decoded and were not added.{1}{2}{3}{4}{5}See the build log for the full list.", skippedFiles.Count, Environment.NewLine, Environment.NewLine, details, Environment.NewLine, Environment.NewLine),
+                L.T("Music warnings"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
     }
 
@@ -548,9 +581,10 @@ public sealed class MainForm : Form
     {
         _musicFolders.Clear();
         _tracks.Clear();
+        _skippedMusicFiles = 0;
         _musicPath.Clear();
         _musicToolTip.SetToolTip(_musicPath, string.Empty);
-        _musicCount.Text = "No music folders loaded";
+        _musicCount.Text = L.T("No music folders loaded");
         _musicList.HorizontalExtent = 0;
         _assignButton.Enabled = false;
     }
@@ -559,7 +593,7 @@ public sealed class MainForm : Form
     {
         _musicPath.Text = _musicFolders.Count == 1
             ? _musicFolders[0]
-            : $"{_musicFolders.Count} music folders selected";
+            : L.T("{0} music folders selected", _musicFolders.Count);
         _musicToolTip.SetToolTip(_musicPath, string.Join(Environment.NewLine, _musicFolders));
     }
 
@@ -597,21 +631,18 @@ public sealed class MainForm : Form
     {
         if (!File.Exists(path) || !AudioConversionService.IsSupportedFile(path))
         {
-            MessageBox.Show(this, "Select MP3, WAV, FLAC, AAC, M4A, WMA, or OGG audio.", "Unsupported audio", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(this, L.T("Select MP3, WAV, FLAC, AAC, M4A, WMA, or OGG audio."), L.T("Unsupported audio"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
         slot.ReplacementPath = path;
         RefreshSlots();
     }
 
-    private void AutoAssign()
+    private void AutoAssign(bool randomize = false)
     {
-        if (_slots.Count == 0 || _tracks.Count == 0) return;
-        for (var index = 0; index < _slots.Count; index++)
-        {
-            _slots[index].ReplacementPath = index < _tracks.Count ? _tracks[index].FilePath : null;
-        }
+        var count = TrackAssignmentService.Fill(_slots, _tracks.ToList(), randomize);
         RefreshSlots();
+        _status.Text = randomize ? L.T("Randomly assigned {0} track(s).", count) : L.T("Assigned {0} track(s) in order.", count);
     }
 
     private async Task BuildOutputAsync()
@@ -619,20 +650,20 @@ public sealed class MainForm : Form
         var rpfPath = _selectedRpfPath;
         if (string.IsNullOrWhiteSpace(rpfPath) || !File.Exists(rpfPath))
         {
-            MessageBox.Show(this, "Select and open a radio station before building.", "No radio station selected", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show(this, L.T("Select and open a radio station before building."), L.T("No radio station selected"), MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
         if (_slots.All(slot => slot.ReplacementPath is null))
         {
-            MessageBox.Show(this, "Assign at least one track before building.", "Nothing to build", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show(this, L.T("Assign at least one track before building."), L.T("Nothing to build"), MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
         using var dialog = new SaveFileDialog
         {
-            Filter = "GTA RPF archive (*.rpf)|*.rpf",
+            Filter = L.T("GTA RPF archive (*.rpf)|*.rpf"),
             FileName = Path.GetFileName(rpfPath),
             InitialDirectory = Path.Combine(Path.GetDirectoryName(rpfPath)!, "GTARadioEditor Output"),
-            Title = "Save rebuilt radio RPF"
+            Title = L.T("Save rebuilt radio RPF")
         };
         if (dialog.ShowDialog(this) != DialogResult.OK) return;
         if (!ConfirmBuild(dialog.FileName)) return;
@@ -645,13 +676,13 @@ public sealed class MainForm : Form
             {
                 var buildProgress = new Progress<int>(value => _buildProgress.Value = PlatformCompatibility.Clamp(value, 0, 100));
                 var result = await _rpfService.BuildOutputAsync(rpfPath!, dialog.FileName, _slots, _timingPath.Text, progress, buildProgress, cancellationToken);
-                AppendLog($"\r\nSuccess: {result.ReplacedContainers} container(s) rebuilt.\r\nOutput: {result.OutputRpfPath}");
+                AppendLog(L.T("\r\nSuccess: {0} container(s) rebuilt.\r\nOutput: {1}", result.ReplacedContainers, result.OutputRpfPath));
                 foreach (var message in result.Messages) AppendLog(message);
                 var sourceRadioRelative = PlatformCompatibility.GetRelativePath(_gtaDirectoryPath.Text, rpfPath!);
                 var timingInstallPath = DescribeTimingInstallPath(rpfPath!, result.SourceTimingPath);
                 MessageBox.Show(this,
-                    $"Built {result.ReplacedContainers} replacement(s) with matching song durations and retimed cues.\n\nInstall both outputs at their original game paths (or the equivalent mods paths):\n\n{result.OutputRpfPath}\n → {sourceRadioRelative}\n\n{result.OutputTimingPath}\n → {timingInstallPath}\n\nKeep both file names unchanged. The timing file is required for correct playback.",
-                    "Build complete", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    L.T("Built {0} replacement(s) with matching song durations and retimed cues.\n\nInstall both outputs at their original game paths (or the equivalent mods paths):\n\n{1}\n → {2}\n\n{3}\n → {4}\n\nKeep both file names unchanged. The timing file is required for correct playback.", result.ReplacedContainers, result.OutputRpfPath, sourceRadioRelative, result.OutputTimingPath, timingInstallPath),
+                    L.T("Build complete"), MessageBoxButtons.OK, MessageBoxIcon.Information);
             });
         }
         finally
@@ -664,22 +695,22 @@ public sealed class MainForm : Form
     private string DescribeTimingInstallPath(string radioPath, string timingPath)
     {
         if (timingPath.EndsWith(".dat54.rel", StringComparison.OrdinalIgnoreCase))
-            return $"Import {Path.GetFileName(timingPath)} into its original entry in the game's timing archive.";
+            return L.T("Import {0} into its original entry in the game's timing archive.", Path.GetFileName(timingPath));
         var gameRoot = Path.GetFullPath(_gtaDirectoryPath.Text).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
         if (Path.GetFullPath(timingPath).StartsWith(gameRoot, StringComparison.OrdinalIgnoreCase))
             return PlatformCompatibility.GetRelativePath(gameRoot, timingPath);
         var originalTimingPath = RadioTimingService.FindDefaultTimingPath(radioPath);
         if (originalTimingPath is not null && Path.GetFileName(originalTimingPath).Equals(Path.GetFileName(timingPath), StringComparison.OrdinalIgnoreCase))
             return PlatformCompatibility.GetRelativePath(gameRoot, originalTimingPath);
-        return $"Replace this station's original timing archive ({Path.GetFileName(timingPath)}) at its original game path.";
+        return L.T("Replace this station's original timing archive ({0}) at its original game path.", Path.GetFileName(timingPath));
     }
 
     private bool ConfirmBuild(string outputPath)
     {
         if (string.IsNullOrWhiteSpace(_timingPath.Text) || !File.Exists(_timingPath.Text))
         {
-            MessageBox.Show(this, "Select the timing file for this station. Base stations normally use audio_rel.rpf; DLC stations need the archive containing their sounds.dat54.rel.",
-                "Radio timing required", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(this, L.T("Select the timing file for this station. Base stations normally use audio_rel.rpf; DLC stations need the archive containing their sounds.dat54.rel."),
+                L.T("Radio timing required"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return false;
         }
         var station = _stationSelector.SelectedItem as RadioStation;
@@ -692,48 +723,48 @@ public sealed class MainForm : Form
         if (unavailableSources.Count > 0)
         {
             MessageBox.Show(this,
-                $"These assigned files are missing or no longer supported:{Environment.NewLine}{Environment.NewLine}" +
+                L.T("These assigned files are missing or no longer supported:{0}{1}", Environment.NewLine, Environment.NewLine) +
                 string.Join(Environment.NewLine, unavailableSources.Select(file => $"- {file}")),
-                "Build blocked", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                L.T("Build blocked"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return false;
         }
 
         var warnings = new List<string>();
         var timingOutput = Path.Combine(Path.GetDirectoryName(outputPath)!, Path.GetFileName(_timingPath.Text));
-        if (File.Exists(timingOutput)) warnings.Add($"The existing timing output will be replaced: {timingOutput}");
+        if (File.Exists(timingOutput)) warnings.Add(L.T("The existing timing output will be replaced: {0}", timingOutput));
         var unassignedCount = _slots.Count - assigned.Count;
         if (unassignedCount > 0)
         {
-            warnings.Add($"{unassignedCount} slot(s) are unassigned and will keep their original GTA audio.");
+            warnings.Add(L.T("{0} slot(s) are unassigned and will keep their original GTA audio.", unassignedCount));
         }
 
         var duplicateAssignments = assigned
             .GroupBy(slot => slot.ReplacementPath!, StringComparer.OrdinalIgnoreCase)
             .Where(group => group.Count() > 1)
-            .Select(group => $"{Path.GetFileName(group.Key)} is assigned to {group.Count()} slots.")
+            .Select(group => L.T("{0} is assigned to {1} slots.", Path.GetFileName(group.Key), group.Count()))
             .ToList();
         warnings.AddRange(duplicateAssignments);
 
         var review = new List<string>
         {
-            "Ready to build:",
+            L.T("Ready to build:"),
             string.Empty,
-            $"Station: {station?.StationName ?? Path.GetFileNameWithoutExtension(_selectedRpfPath)}",
-            $"Replacements: {assigned.Count}/{_slots.Count}",
-            $"Radio output: {outputPath}",
-            $"Timing output: {timingOutput}",
-            "Song durations and cue positions will follow the converted audio. Install both outputs."
+            L.T("Station: {0}", station?.StationName ?? Path.GetFileNameWithoutExtension(_selectedRpfPath)),
+            L.T("Replacements: {0}/{1}", assigned.Count, _slots.Count),
+            L.T("Radio output: {0}", outputPath),
+            L.T("Timing output: {0}", timingOutput),
+            L.T("Song durations and cue positions will follow the converted audio. Install both outputs.")
         };
         if (warnings.Count > 0)
         {
             review.Add(string.Empty);
-            review.Add("Warnings:");
+            review.Add(L.T("Warnings:"));
             review.AddRange(warnings.Select(warning => $"- {warning}"));
         }
         review.Add(string.Empty);
-        review.Add("Build this RPF now?");
+        review.Add(L.T("Build this RPF now?"));
 
-        return MessageBox.Show(this, string.Join(Environment.NewLine, review), "Confirm build",
+        return MessageBox.Show(this, string.Join(Environment.NewLine, review), L.T("Confirm build"),
             MessageBoxButtons.YesNo, warnings.Count > 0 ? MessageBoxIcon.Warning : MessageBoxIcon.Question,
             MessageBoxDefaultButton.Button2) == DialogResult.Yes;
     }
@@ -751,18 +782,18 @@ public sealed class MainForm : Form
         try
         {
             await operation(progress, _operationCancellation.Token);
-            _status.Text = "Ready";
+            _status.Text = L.T("Ready");
         }
         catch (OperationCanceledException)
         {
-            _status.Text = "Cancelled";
-            AppendLog("Operation cancelled.");
+            _status.Text = L.T("Cancelled");
+            AppendLog(L.T("Operation cancelled."));
         }
         catch (Exception exception)
         {
-            _status.Text = "Failed";
-            AppendLog("ERROR: " + exception.Message);
-            MessageBox.Show(this, exception.Message, "GTA Radio Editor", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            _status.Text = L.T("Failed");
+            AppendLog(L.T("ERROR: ") + exception.Message);
+            MessageBox.Show(this, exception.Message, L.T("GTA Radio Editor"), MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
         finally
         {
@@ -783,6 +814,7 @@ public sealed class MainForm : Form
             _scanButton.Enabled = station?.IsAvailable == true;
             _buildButton.Enabled = station?.IsAvailable == true && _slots.Count > 0;
             _assignButton.Enabled = _tracks.Count > 0 && _slots.Count > 0;
+            _randomFillButton.Enabled = _tracks.Count > 0 && _slots.Count > 0;
         }
     }
 
@@ -790,6 +822,62 @@ public sealed class MainForm : Form
     {
         _slotGrid.Refresh();
         _assignButton.Enabled = _tracks.Count > 0 && _slots.Count > 0;
+        _randomFillButton.Enabled = _tracks.Count > 0 && _slots.Count > 0;
+    }
+
+    private void CaptureTextKeys(Control control)
+    {
+        if (L.KeyForText(control.Text) is string key) _textKeys[control] = key;
+        foreach (Control child in control.Controls) CaptureTextKeys(child);
+    }
+
+    private void ApplyLanguage()
+    {
+        if (_changingLanguage) return;
+        _changingLanguage = true;
+        var selectedStation = _stationSelector.SelectedItem;
+        SuspendLayout();
+        try
+        {
+            Text = L.T("GTA Radio Editor v{0} - Stable", AppVersion.Current);
+            foreach (var entry in _textKeys) entry.Key.Text = L.T(entry.Value);
+            foreach (var entry in _headerKeys) entry.Key.HeaderText = L.T(entry.Value);
+            if (_slotGrid.Columns["ClearReplacement"] is DataGridViewButtonColumn clearColumn) clearColumn.Text = L.T("Clear");
+            _languageSelector.SelectedItem = L.Languages.First(l => l.Code == L.Code);
+            var station = _stationSelector.SelectedItem as RadioStation;
+            _stations.ResetBindings();
+            _stationSelector.SelectedItem = selectedStation;
+            _slotGrid.Refresh();
+            _musicToolTip.SetToolTip(_stationSelector, station?.FullDisplayName ?? string.Empty);
+            _slotCount.Text = _slots.Count > 0 ? L.T("{0} replaceable music slot(s) detected", _slots.Count) :
+                station is null ? L.T("No RPF scanned") :
+                station.IsAvailable ? L.T("{0} selected. Open it to inspect its music slots.", station.StationName) : L.T("{0} is unavailable", station.StationName);
+            _musicCount.Text = _musicFolders.Count == 0 ? L.T("No music folders loaded") :
+                L.T("{0} usable audio file(s) from {1} folder(s)", _tracks.Count, _musicFolders.Count) +
+                (_skippedMusicFiles == 0 ? string.Empty : L.T(" ({0} skipped)", _skippedMusicFiles));
+            if (_musicFolders.Count > 0) UpdateMusicFolderDisplay();
+            _status.Text = station is { IsAvailable: false } ? L.T(station.DisabledReason!) :
+                _selectedRpfPath is null ? L.T("Choose a GTA V folder to find its radio stations.") : L.T("Ready");
+            _musicToolTip.SetToolTip(_timingPath, L.T("Base stations normally use audio_rel.rpf. For DLC stations, choose the RPF containing that station's sounds.dat54.rel, or the extracted REL file."));
+#if NET48
+            PlatformCompatibility.SetCueBanner(_gtaDirectoryPath, L.T("Choose the GTA V game or port folder"));
+            PlatformCompatibility.SetCueBanner(_musicPath, L.T("Add music folders: MP3, WAV, FLAC, AAC, M4A, WMA, or OGG"));
+#else
+            _gtaDirectoryPath.PlaceholderText = L.T("Choose the GTA V game or port folder");
+            _musicPath.PlaceholderText = L.T("Add music folders: MP3, WAV, FLAC, AAC, M4A, WMA, or OGG");
+#endif
+        }
+        finally
+        {
+            ResumeLayout(performLayout: true);
+            _changingLanguage = false;
+        }
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing) L.Changed -= ApplyLanguage;
+        base.Dispose(disposing);
     }
 
     private void AppendLog(string message)

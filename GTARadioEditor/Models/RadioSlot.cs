@@ -11,7 +11,7 @@ public sealed class RadioSlot
     public string? ReplacementPath { get; set; }
 
     public string ReplacementDisplay => ReplacementPath is null
-        ? "Drop a song here"
+        ? L.T("Drop a song here")
         : Path.GetFileName(ReplacementPath);
 }
 

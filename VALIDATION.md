@@ -15,4 +15,6 @@ Validated on October 9, 2026 against the local Switch port's `RADIO_09_HIPHOP_OL
 
 No console/game playback test was performed. DJ speech remains enabled, and cue positions follow the original track proportionally rather than being detected from the replacement music. DLC/custom layouts are checked conservatively but were not covered by the real-archive fixture above.
 
+The localization/assignment extension adds six embedded catalogs with 160 messages each. Checks verify matching keys and placeholders, valid WAV identifiers in every language, exact requested English button names, live switching without losing selections, unique randomized assignments, clearing all assignments without clearing music, and disabling language switching while an operation is active. These checks passed on both target frameworks. All six translated layouts were visually inspected after allowing more than two seconds for rendering. The updated standalone EXE also scanned all 29 slots from a directory containing only that EXE.
+
 Reproduction commands and the generated-fixture/integration harness are documented in `README.md`. No game assets or encryption keys are included in the repository.
