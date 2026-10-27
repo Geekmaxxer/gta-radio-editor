@@ -67,6 +67,17 @@ public sealed class MainForm : Form
         Style = ProgressBarStyle.Continuous,
         Visible = false
     };
+    private readonly TextBox _layeredFsPath = new()
+    {
+        Dock = DockStyle.Fill,
+        ReadOnly = true,
+#if !NET48
+        PlaceholderText = "LayeredFS zip path prints here after Build output RPF",
+#endif
+        BackColor = SystemColors.ControlLight
+    };
+    private readonly Button _zipButton = new() { Text = "Zip LayeredFS", AutoSize = true, Enabled = false };
+    private string? _lastBuiltRpfPath;
     private readonly List<Control> _busyControls = [];
     private string? _selectedRpfPath;
     private CancellationTokenSource? _operationCancellation;
@@ -170,6 +181,13 @@ public sealed class MainForm : Form
         workflowSteps.Controls.Add(buildStep, 2, 0);
 
         setup.Controls.Add(workflowSteps, 0, 1);
+        var layeredRow = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, AutoSize = true, Margin = new Padding(0, 4, 0, 0) };
+        layeredRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        layeredRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        _zipButton.Click += (_, _) => ZipLayeredFs();
+        layeredRow.Controls.Add(_zipButton, 0, 0);
+        layeredRow.Controls.Add(_layeredFsPath, 1, 0);
+        setup.Controls.Add(layeredRow, 0, 2);
         _stationSelector.DataSource = _stations;
         root.Controls.Add(setup, 0, 0);
 
@@ -627,6 +645,10 @@ public sealed class MainForm : Form
                 var buildProgress = new Progress<int>(value => _buildProgress.Value = PlatformCompatibility.Clamp(value, 0, 100));
                 var result = await _rpfService.BuildOutputAsync(rpfPath!, dialog.FileName, _slots, progress, buildProgress, cancellationToken);
                 AppendLog($"\r\nSuccess: {result.ReplacedContainers} container(s) rebuilt.\r\nOutput: {result.OutputRpfPath}");
+                _lastBuiltRpfPath = result.OutputRpfPath;
+                _zipButton.Enabled = true;
+                _layeredFsPath.Text = string.Empty;
+                AppendLog("SD option: press Zip LayeredFS for atmosphere/contents/0100B00B51230000/romfs/switch/audio/sfx/<station>.rpf.");
                 MessageBox.Show(this,
                     $"Built {result.ReplacedContainers} replacement(s).\n\nCopy the output RPF into the matching path under your GTA V mods folder. Keep its file name unchanged.",
                     "Build complete", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -738,6 +760,29 @@ public sealed class MainForm : Form
             _scanButton.Enabled = station?.IsAvailable == true;
             _buildButton.Enabled = station?.IsAvailable == true && _slots.Count > 0;
             _assignButton.Enabled = _tracks.Count > 0 && _slots.Count > 0;
+            _zipButton.Enabled = _lastBuiltRpfPath is not null && File.Exists(_lastBuiltRpfPath);
+        }
+    }
+
+    private void ZipLayeredFs()
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(_lastBuiltRpfPath) || !File.Exists(_lastBuiltRpfPath))
+            {
+                MessageBox.Show(this, "Build an output RPF first, then zip it for Switch LayeredFS.", "GTA Radio Editor", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            var zipPath = SwitchZipService.BuildLayeredFsZip(_lastBuiltRpfPath!, null);
+            _layeredFsPath.Text = zipPath;
+            AppendLog("LayeredFS zip: " + zipPath);
+            AppendLog("SD target: " + SwitchZipService.LayeredFsHint(Path.GetFileName(_lastBuiltRpfPath)));
+            AppendLog("Run the GTAVPatcher Switch conversion step before copying to the SD card.");
+        }
+        catch (Exception exception)
+        {
+            AppendLog("ZIP ERROR: " + exception.Message);
+            MessageBox.Show(this, exception.Message, "GTA Radio Editor", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }
 

@@ -25,7 +25,7 @@ public sealed class UpdateAvailableDialog : Form
         };
         var messageLabel = new Label
         {
-            Text = "A new version of GTA Gameconfig Updater is available.",
+            Text = "A new version of GTA Radio Editor is available.",
             AutoSize = true,
             Location = new Point(64, 20),
             MaximumSize = new Size(296, 0)
