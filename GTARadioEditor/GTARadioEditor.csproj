@@ -13,6 +13,10 @@
     <Version>0.6.0</Version>
     <AssemblyVersion>0.6.0.0</AssemblyVersion>
     <FileVersion>0.6.0.0</FileVersion>
+<<<<<<< HEAD
+=======
+    <InformationalVersion>0.6 - Stable</InformationalVersion>
+>>>>>>> 56b39beea1c5e97761e9930455eb0e15fab21b83
     <DebugType>none</DebugType>
     <DebugSymbols>false</DebugSymbols>
     <CopyOutputSymbolsToPublishDirectory>false</CopyOutputSymbolsToPublishDirectory>
@@ -29,6 +33,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="Locales\*.json" LogicalName="GTARadioEditor.Locales.%(Filename)%(Extension)" />
     <PackageReference Include="NAudio" Version="2.2.1" />
     <PackageReference Include="NAudio.Vorbis" Version="1.5.0" />
     <ProjectReference Include="..\vendor\CodeWalker\CodeWalker.Core\CodeWalker.Core.csproj" />
@@ -43,14 +48,15 @@
     <PackageReference Include="Costura.Fody" Version="6.2.0" PrivateAssets="all" />
   </ItemGroup>
 
-<Target Name="PrepareNet48SingleExe">
+<Target Name="PrepareNet48SingleExe" Condition="'$(TargetFramework)' == 'net48'">
   <ItemGroup>
-    <Net48SingleExeSidecars Include="$(MSBuildProjectDirectory)\bin\$(Configuration)\net48\*.dll" />
-    <Net48SingleExeSidecars Include="$(MSBuildProjectDirectory)\bin\$(Configuration)\net48\$(AssemblyName).exe.config" />
-    <Net48SingleExeSidecars Include="$(MSBuildProjectDirectory)\bin\$(Configuration)\net48\$(AssemblyName).pdb" />
-    <Net48SingleExeSidecars Include="$(MSBuildProjectDirectory)\bin\$(Configuration)\net48\CodeWalker.Core.pdb" />
-    <Net48SingleExeSidecars Include="$(MSBuildProjectDirectory)\bin\$(Configuration)\net48\ShadersGen9Conversion.xml" />
-    <Net48SingleExeSidecars Include="$(MSBuildProjectDirectory)\bin\$(Configuration)\net48\strings.txt" />
+    <Net48SingleExeSidecars Include="$(TargetDir)*.dll" />
+    <Net48SingleExeSidecars Include="$(TargetDir)*.deps.json" />
+    <Net48SingleExeSidecars Include="$(TargetDir)$(AssemblyName).exe.config" />
+    <Net48SingleExeSidecars Include="$(TargetDir)$(AssemblyName).pdb" />
+    <Net48SingleExeSidecars Include="$(TargetDir)CodeWalker.Core.pdb" />
+    <Net48SingleExeSidecars Include="$(TargetDir)ShadersGen9Conversion.xml" />
+    <Net48SingleExeSidecars Include="$(TargetDir)strings.txt" />
   </ItemGroup>
   <Delete Files="@(Net48SingleExeSidecars)" />
 </Target>

@@ -10,9 +10,9 @@ public sealed record RadioStation(
     public bool IsAvailable => string.IsNullOrWhiteSpace(DisabledReason);
 
     public string DisplayName => $"{StationName} ({ArchiveCode})" +
-        (IsAvailable ? string.Empty : " — unavailable");
+        (IsAvailable ? string.Empty : L.T(" — unavailable"));
 
     public string FullDisplayName => IsAvailable
         ? $"{DisplayName}{Environment.NewLine}{RelativePath}"
-        : $"{DisplayName}{Environment.NewLine}{DisabledReason}{Environment.NewLine}{RelativePath}";
+        : $"{DisplayName}{Environment.NewLine}{L.T(DisabledReason!)}{Environment.NewLine}{RelativePath}";
 }

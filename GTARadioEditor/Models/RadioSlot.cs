@@ -11,7 +11,7 @@ public sealed class RadioSlot
     public string? ReplacementPath { get; set; }
 
     public string ReplacementDisplay => ReplacementPath is null
-        ? "Drop a song here"
+        ? L.T("Drop a song here")
         : Path.GetFileName(ReplacementPath);
 }
 
@@ -22,4 +22,5 @@ public sealed record AudioTrack(string FilePath, TimeSpan Duration)
 
 public sealed record ConvertedRadioAudio(byte[] LeftWave, byte[] RightWave, int SampleCount, TimeSpan Duration);
 
-public sealed record BuildResult(string OutputRpfPath, int ReplacedContainers, IReadOnlyList<string> Messages);
+public sealed record BuildResult(string OutputRpfPath, int ReplacedContainers, IReadOnlyList<string> Messages,
+    string SourceTimingPath, string OutputTimingPath);

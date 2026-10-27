@@ -54,7 +54,7 @@ public sealed class GtaDirectoryService
     {
         if (!Directory.Exists(gtaDirectory))
         {
-            throw new DirectoryNotFoundException("The selected GTA V folder does not exist.");
+            throw new DirectoryNotFoundException(L.T("The selected GTA V folder does not exist."));
         }
 
         return await Task.Run(() =>
@@ -72,7 +72,7 @@ public sealed class GtaDirectoryService
                 directoriesScanned++;
                 if (directoriesScanned == 1 || directoriesScanned % 100 == 0)
                 {
-                    progress?.Report($"Searching game folders for radio archives ({directoriesScanned} folders checked)...");
+                    progress?.Report(L.T("Searching game folders for radio archives ({0} folders checked)...", directoriesScanned));
                 }
 
                 archivePaths.AddRange(EnumerateRadioArchives(directory));
@@ -97,10 +97,10 @@ public sealed class GtaDirectoryService
             if (stations.Count == 0)
             {
                 throw new InvalidDataException(
-                    "No RADIO_*.rpf archives were found under this folder. Select the GTA V installation or port root, not an individual audio folder.");
+                    L.T("No RADIO_*.rpf archives were found under this folder. Select the GTA V installation or port root, not an individual audio folder."));
             }
 
-            progress?.Report($"Found {stations.Count} radio station archive(s).");
+            progress?.Report(L.T("Found {0} radio station archive(s).", stations.Count));
             return (IReadOnlyList<RadioStation>)stations;
         }, cancellationToken);
     }

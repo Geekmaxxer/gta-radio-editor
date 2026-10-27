@@ -105,6 +105,7 @@ internal static class UpdateChecker
         if (text.IndexOf('.') < 0)
             text += ".0";
 
-        return Version.TryParse(text, out var version) ? version : null;
+        if (!Version.TryParse(text, out var version)) return null;
+        return new Version(version.Major, version.Minor, Math.Max(0, version.Build), Math.Max(0, version.Revision));
     }
 }

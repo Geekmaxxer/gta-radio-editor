@@ -6,3 +6,5 @@
 *.pdb
 *.exe
 FodyWeavers.xsd
+**/tests/
+**/validation/

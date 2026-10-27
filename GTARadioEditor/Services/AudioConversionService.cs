@@ -40,7 +40,7 @@ public static class AudioConversionService
         {
             1 => new MonoToStereoSampleProvider(audio.Samples),
             2 => audio.Samples,
-            _ => throw new NotSupportedException($"{Path.GetFileName(filePath)} has {audio.WaveFormat.Channels} channels. Only mono or stereo sources are supported.")
+            _ => throw new NotSupportedException(L.T("{0} has {1} channels. Only mono or stereo sources are supported.", Path.GetFileName(filePath), audio.WaveFormat.Channels))
         };
 
         var resampled = new WdlResamplingSampleProvider(stereoInput, GtaSampleRate);
@@ -62,7 +62,7 @@ public static class AudioConversionService
             }
             if (sampleCount % 2 != 0)
             {
-                throw new InvalidDataException("The audio decoder returned an incomplete stereo frame.");
+                throw new InvalidDataException(L.T("The audio decoder returned an incomplete stereo frame."));
             }
 
             var frames = sampleCount / 2;
@@ -73,9 +73,10 @@ public static class AudioConversionService
             }
             leftStream.Write(leftPcm, 0, frames * 2);
             rightStream.Write(rightPcm, 0, frames * 2);
-            outputFrames += frames;
+            outputFrames = checked(outputFrames + frames);
         }
 
+        if (outputFrames == 0) throw new InvalidDataException(L.T("The replacement audio contains no decoded samples."));
         var duration = TimeSpan.FromSeconds(outputFrames / (double)GtaSampleRate);
         return new ConvertedRadioAudio(BuildMonoPcmWave(leftStream.ToArray()), BuildMonoPcmWave(rightStream.ToArray()), outputFrames, duration);
     }
@@ -84,7 +85,7 @@ public static class AudioConversionService
     {
         if (!IsSupportedFile(filePath))
         {
-            throw new NotSupportedException($"{Path.GetExtension(filePath)} is not a supported audio format.");
+            throw new NotSupportedException(L.T("{0} is not a supported audio format.", Path.GetExtension(filePath)));
         }
 
         if (Path.GetExtension(filePath).Equals(".ogg", StringComparison.OrdinalIgnoreCase))
@@ -97,7 +98,7 @@ public static class AudioConversionService
             catch (Exception vorbisException)
             {
                 throw new InvalidDataException(
-                    $"Could not decode {Path.GetFileName(filePath)} as Ogg Vorbis. Only Ogg Vorbis audio is supported for .ogg files.",
+                    L.T("Could not decode {0} as Ogg Vorbis. Only Ogg Vorbis audio is supported for .ogg files.", Path.GetFileName(filePath)),
                     vorbisException);
             }
         }
@@ -110,7 +111,7 @@ public static class AudioConversionService
         catch (Exception exception) when (UsesWindowsMediaFoundationCodec(filePath))
         {
             throw new InvalidDataException(
-                $"Could not decode {Path.GetFileName(filePath)}. This format uses Windows Media Foundation; install the Windows Media Feature Pack if this Windows installation does not include its media codecs.",
+                L.T("Could not decode {0}. This format uses Windows Media Foundation; install the Windows Media Feature Pack if this Windows installation does not include its media codecs.", Path.GetFileName(filePath)),
                 exception);
         }
     }
